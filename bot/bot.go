@@ -45,6 +45,10 @@ func (b *Bot) Run() error {
 	return nil
 }
 
+func (b *Bot) getChatMember(chatId int64, userId int64) {
+
+}
+
 func (b *Bot) handleUpdate(update telego.Update) {
 
 }
