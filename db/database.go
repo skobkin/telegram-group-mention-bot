@@ -10,6 +10,8 @@ import (
 var (
 	ErrCreateDatabase  = errors.New("cannot create a database")
 	ErrMigrationFailed = errors.New("failed to migrate")
+	ErrQuery           = errors.New("failed to select")
+	ErrInsert          = errors.New("failed to insert new row")
 )
 
 type Database struct {
@@ -59,6 +61,35 @@ func (d *Database) Migrate() error {
 	return nil
 }
 
-func (d *Database) FindOrCreateTelegramUser(id int) *User {
-	return &User{}
+func (d *Database) FindOrCreateTelegramUser(telegramId int64) (*User, error) {
+	user := &User{}
+
+	result := d.db.First(user, telegramId)
+
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		slog.Error("Cannot retrieve user from the DB", result.Error)
+
+		return nil, ErrQuery
+	}
+
+	if result.RowsAffected != 0 && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		slog.Debug("User found. Returning.")
+
+		return user, nil
+	}
+
+	slog.Debug("User not found. Creating new user.")
+
+	user = &User{
+		TelegramId: telegramId,
+	}
+
+	result = d.db.Create(user)
+	if result.Error != nil || result.RowsAffected != 1 {
+		slog.Error("Cannot create new user", result.Error, result.RowsAffected)
+
+		return nil, ErrInsert
+	}
+
+	return user, nil
 }
