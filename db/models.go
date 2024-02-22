@@ -18,10 +18,10 @@ type ChatMember struct {
 }
 
 type Group struct {
-	Id             int `gorm:"primaryKey"`
-	ChatTelegramId int64
-	Chat           *Chat `gorm:"foreignKey:ChatTelegramId;references:TelegramId"`
-	Tag            string
+	Id             int    `gorm:"primaryKey"`
+	ChatTelegramId int64  `gorm:"index:idx_chat_tag,priority:1,unique"`
+	Chat           *Chat  `gorm:"foreignKey:ChatTelegramId;references:TelegramId"`
+	Tag            string `gorm:"index:idx_chat_tag,priority:2,unique"`
 	Title          string
 	Members        []*ChatMember `gorm:"many2many:group_members;"`
 }

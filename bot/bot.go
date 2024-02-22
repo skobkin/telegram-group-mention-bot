@@ -7,6 +7,7 @@ import (
 	th "github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
 	"log/slog"
+	"strings"
 )
 
 var (
@@ -15,15 +16,17 @@ var (
 	ErrHandlerInit    = errors.New("cannot initialize handler")
 )
 
+const contextUserKey = "user"
+
 type Bot struct {
-	api *telego.Bot
-	db  *db.Database
+	api     *telego.Bot
+	storage *db.Storage
 }
 
-func NewBot(api *telego.Bot, db *db.Database) *Bot {
+func NewBot(api *telego.Bot, db *db.Storage) *Bot {
 	return &Bot{
-		api: api,
-		db:  db,
+		api:     api,
+		storage: db,
 	}
 }
 
@@ -59,7 +62,13 @@ func (b *Bot) Run() error {
 	defer bh.Stop()
 	defer b.api.StopLongPolling()
 
+	bh.Use(b.userFillMiddleware)
+
 	bh.Handle(b.startHandler, th.CommandEqual("start"))
+	bh.Handle(b.createHandler, th.CommandEqual("create"))
+	bh.Handle(b.deleteHandler, th.CommandEqual("delete"))
+	bh.Handle(b.joinHandler, th.CommandEqual("join"))
+	bh.Handle(b.leaveHandler, th.CommandEqual("leave"))
 	bh.Handle(b.mentionHandler, th.CommandEqual("mention"))
 	bh.Handle(b.helpHandler, th.Any())
 
@@ -71,33 +80,86 @@ func (b *Bot) Run() error {
 func (b *Bot) mentionHandler(bot *telego.Bot, update telego.Update) {
 	slog.Info("/mention")
 
-	// Finding or creating user
-	_, err := b.db.FindOrCreateTelegramUser(update.Message.From.ID)
+	_, _ = bot.SendMessage(tu.Message(
+		tu.ID(update.Message.Chat.ID),
+		"/mention is not implemented yet",
+	))
+}
+
+func (b *Bot) createHandler(bot *telego.Bot, update telego.Update) {
+	slog.Info("/create")
+
+	args := strings.Split(update.Message.Text, " ")
+
+	if len(args) < 3 {
+		_, _ = bot.SendMessage(tu.Message(
+			tu.ID(update.Message.Chat.ID),
+			"Usage: /create %tag% %title%",
+		))
+	}
+
+	chatId := update.Message.Chat.ID
+	tag := args[1]
+	title := args[2]
+
+	_, err := b.storage.FindGroupByChatIdAndTag(chatId, tag)
+	if err == nil {
+		_, _ = bot.SendMessage(tu.Messagef(
+			tu.ID(update.Message.Chat.ID),
+			"Error: Group with tag '%s' already exists.",
+			tag,
+		))
+
+		return
+	}
+
+	group, err := b.storage.CreateGroup(chatId, tag, title)
 	if err != nil {
-		slog.Error("Cannot find or create user in the DB")
+		slog.Error("Group couldn't be created in the storage")
+
+		_, _ = bot.SendMessage(tu.Message(
+			tu.ID(update.Message.Chat.ID),
+			"Error: Database error. Try again later.",
+		))
 
 		return
 	}
 
 	_, err = bot.SendMessage(tu.Messagef(
-		tu.ID(update.Message.Chat.ID),
-		"Hello %s!", update.Message.From.FirstName,
+		tu.ID(chatId),
+		"Group with tag '%s' created",
+		group.Tag,
 	))
 	if err != nil {
-		slog.Error("Cannot send a message", err)
+		slog.Error("Cannot send reply message", err)
 	}
 }
 
-func (b *Bot) startHandler(bot *telego.Bot, update telego.Update) {
-	slog.Info("/start")
+func (b *Bot) deleteHandler(bot *telego.Bot, update telego.Update) {
+	slog.Info("/delete")
 
-	_, err := bot.SendMessage(tu.Messagef(
+	_, _ = bot.SendMessage(tu.Message(
 		tu.ID(update.Message.Chat.ID),
-		"Hello %s!", update.Message.From.FirstName,
+		"/delete is not implemented yet",
 	))
-	if err != nil {
-		slog.Error("Cannot send a message", err)
-	}
+}
+
+func (b *Bot) joinHandler(bot *telego.Bot, update telego.Update) {
+	slog.Info("/join")
+
+	_, _ = bot.SendMessage(tu.Message(
+		tu.ID(update.Message.Chat.ID),
+		"/join is not implemented yet",
+	))
+}
+
+func (b *Bot) leaveHandler(bot *telego.Bot, update telego.Update) {
+	slog.Info("/leave")
+
+	_, _ = bot.SendMessage(tu.Message(
+		tu.ID(update.Message.Chat.ID),
+		"/leave is not implemented yet",
+	))
 }
 
 func (b *Bot) helpHandler(bot *telego.Bot, update telego.Update) {
@@ -112,4 +174,13 @@ func (b *Bot) helpHandler(bot *telego.Bot, update telego.Update) {
 	if err != nil {
 		slog.Error("Cannot send a message", err)
 	}
+}
+
+func (b *Bot) startHandler(bot *telego.Bot, update telego.Update) {
+	slog.Info("/start")
+
+	_, _ = bot.SendMessage(tu.Message(
+		tu.ID(update.Message.Chat.ID),
+		"/start is not implemented yet",
+	))
 }

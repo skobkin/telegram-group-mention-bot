@@ -17,21 +17,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	database, err := db.NewDatabase("./data.sqlite")
+	storage, err := db.NewStorage("./data.sqlite")
 	if err != nil {
-		slog.Error("Cannot open the database", err)
+		slog.Error("Cannot open the storage", err)
 
 		os.Exit(1)
 	}
 
-	err = database.Migrate()
+	err = storage.Migrate()
 	if err != nil {
-		slog.Error("Cannot migrate the database", err)
+		slog.Error("Cannot migrate the storage", err)
 
 		os.Exit(1)
 	}
 
-	botService := bot.NewBot(api, database)
+	botService := bot.NewBot(api, storage)
 
 	err = botService.Run()
 	if err != nil {
