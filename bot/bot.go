@@ -90,11 +90,16 @@ func (b *Bot) Start() error {
 func (b *Bot) handleNewGroup(ctx *th.Context, message telego.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /new <group_name>"))
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /new <group_name>\nGroup name can only contain lowercase letters, numbers, and dashes."))
 		return nil
 	}
 
-	groupName := args[1]
+	groupName := strings.ToLower(args[1])
+	if !isValidGroupName(groupName) {
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Invalid group name. Group name can only contain lowercase letters, numbers, and dashes."))
+		return nil
+	}
+
 	err := b.storage.CreateGroup(groupName, message.Chat.ID)
 	if err != nil {
 		slog.Error("Failed to create group", "error", err,
@@ -394,4 +399,16 @@ func escapeMarkdownV2(text string) string {
 		text = strings.ReplaceAll(text, char, "\\"+char)
 	}
 	return text
+}
+
+func isValidGroupName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			return false
+		}
+	}
+	return true
 }
