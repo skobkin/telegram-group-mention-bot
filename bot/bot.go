@@ -310,7 +310,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message telego.Message) error {
 /new <name> - Create a new mention group
 /join <name> - Join an existing mention group
 /leave <name> - Leave a mention group
-/mention <name> - Mention all members of a group
+/mention <name> or /m <name> or /call <name> - Mention all members of a group
 /show <name> - Show all members of a group without mentioning them
 /del <name> - Delete a group (only if it has no members)
 /list - Show all groups in this chat
