@@ -1,5 +1,7 @@
 # Telegram Group Mention Bot
 
+[![Build Status](https://ci.skobk.in/api/badges/skobkin/telegram-group-mention-bot/status.svg)](https://ci.skobk.in/skobkin/telegram-group-mention-bot)
+
 A Telegram bot that allows users to create mention groups and mention all members of a group at once.
 
 ## Features
