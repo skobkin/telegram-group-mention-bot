@@ -15,8 +15,8 @@ type MentionGroup struct {
 // GroupMember represents a user who is a member of a mention group
 type GroupMember struct {
 	gorm.Model
-	GroupID      uint
-	UserID       int64
+	GroupID      uint  `gorm:"uniqueIndex:idx_group_user"`
+	UserID       int64 `gorm:"uniqueIndex:idx_group_user"`
 	Username     string
 	FirstName    string
 	LastName     string

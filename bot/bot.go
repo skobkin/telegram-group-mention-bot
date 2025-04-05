@@ -8,13 +8,13 @@ import (
 
 	"telegram-group-mention-bot/storage"
 
-	"github.com/mymmrac/telego"
+	t "github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
-	"github.com/mymmrac/telego/telegoutil"
+	tu "github.com/mymmrac/telego/telegoutil"
 )
 
 type Bot struct {
-	bot     *telego.Bot
+	bot     *t.Bot
 	storage *storage.Storage
 }
 
@@ -22,7 +22,7 @@ func New(token string, storage *storage.Storage) (*Bot, error) {
 	slog.Info("Initializing bot", "token_length", len(token))
 
 	// Create bot with debug logging
-	bot, err := telego.NewBot(token, telego.WithDefaultLogger(false, true))
+	bot, err := t.NewBot(token, t.WithDefaultLogger(false, true))
 	if err != nil {
 		slog.Error("Failed to create bot", "error", err, "token_length", len(token))
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -83,11 +83,19 @@ func (b *Bot) Start() error {
 	h.HandleMessage(b.handleDeleteGroup, th.CommandEqual("del"))
 	h.HandleMessage(b.handleShowGroup, th.CommandEqual("show"))
 
+	h.HandleCallbackQuery(b.handleGroupCallback, th.Or(
+		th.CallbackDataPrefix("join:"),
+		th.CallbackDataPrefix("leave:"),
+		th.CallbackDataPrefix("mention:"),
+		th.CallbackDataPrefix("del:"),
+		th.CallbackDataPrefix("show:"),
+	))
+
 	slog.Info("Starting bot handlers")
 	return h.Start()
 }
 
-func (b *Bot) handleNewGroup(ctx *th.Context, message telego.Message) error {
+func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) != 2 {
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /new <group_name>\nGroup name can only contain lowercase letters, numbers, and dashes."))
@@ -114,203 +122,157 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message telego.Message) error {
 	return nil
 }
 
-func (b *Bot) handleJoin(ctx *th.Context, message telego.Message) error {
+func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
-	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /join <group_name>"))
-		return nil
-	}
-
-	groupName := args[1]
-	group, err := b.storage.GetGroup(groupName, message.Chat.ID)
-	if err != nil {
-		slog.Error("Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", message.Chat.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
-		return nil
-	}
-
-	user := message.From
-	err = b.storage.AddMember(group.ID, user.ID, user.Username, user.FirstName, user.LastName)
-	if err != nil {
-		slog.Error("Failed to join group", "error", err,
-			"group_id", group.ID, "user_id", user.ID, "username", user.Username)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to join group: %v", err)))
-		return nil
-	}
-
-	slog.Info("User joined group", "group_name", groupName,
-		"user_id", user.ID, "username", user.Username)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully joined group '%s'\\!", escapeMarkdownV2(groupName)))
-	return nil
-}
-
-func (b *Bot) handleLeave(ctx *th.Context, message telego.Message) error {
-	args := strings.Fields(message.Text)
-	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /leave <group_name>"))
-		return nil
-	}
-
-	groupName := args[1]
-	group, err := b.storage.GetGroup(groupName, message.Chat.ID)
-	if err != nil {
-		slog.Error("Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", message.Chat.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
-		return nil
-	}
-
-	err = b.storage.RemoveMember(group.ID, message.From.ID)
-	if err != nil {
-		slog.Error("Failed to leave group", "error", err,
-			"group_id", group.ID, "user_id", message.From.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to leave group: %v", err)))
-		return nil
-	}
-
-	slog.Info("User left group", "group_name", groupName,
-		"user_id", message.From.ID)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully left group '%s'\\!", escapeMarkdownV2(groupName)))
-	return nil
-}
-
-func (b *Bot) handleMention(ctx *th.Context, message telego.Message) error {
-	args := strings.Fields(message.Text)
-	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /mention <group_name>"))
-		return nil
-	}
-
-	groupName := args[1]
-	group, err := b.storage.GetGroup(groupName, message.Chat.ID)
-	if err != nil {
-		slog.Error("Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", message.Chat.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
-		return nil
-	}
-
-	members, err := b.storage.GetGroupMembers(group.ID)
-	if err != nil {
-		slog.Error("Failed to get group members", "error", err,
-			"group_id", group.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
-		return nil
-	}
-
-	if len(members) == 0 {
-		slog.Info("No members in group", "group_name", groupName)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("No members in this group!"))
-		return nil
-	}
-
-	var mentions []string
-	for _, member := range members {
-		if member.Username != "" {
-			mentions = append(mentions, fmt.Sprintf("@%s", member.Username))
-		} else {
-			mentions = append(mentions, fmt.Sprintf("[%s %s](tg://user?id=%d)",
-				escapeMarkdownV2(member.FirstName), escapeMarkdownV2(member.LastName), member.UserID))
+	if len(args) < 2 {
+		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "join")
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
 		}
-	}
-
-	mentionText := fmt.Sprintf("Mentioning %s group members:\n%s", escapeMarkdownV2(groupName), strings.Join(mentions, ", "))
-	b.sendMessage(message.Chat.ID, mentionText)
-	return nil
-}
-
-func (b *Bot) handleDeleteGroup(ctx *th.Context, message telego.Message) error {
-	args := strings.Fields(message.Text)
-	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /del <group_name>"))
-		return nil
-	}
-
-	groupName := args[1]
-	group, err := b.storage.GetGroup(groupName, message.Chat.ID)
-	if err != nil {
-		slog.Error("Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", message.Chat.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
-		return nil
-	}
-
-	members, err := b.storage.GetGroupMembers(group.ID)
-	if err != nil {
-		slog.Error("Failed to get group members", "error", err,
-			"group_id", group.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
-		return nil
-	}
-
-	if len(members) > 0 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Cannot delete group: it has members. Ask members to /leave first."))
-		return nil
-	}
-
-	err = b.storage.DeleteGroup(group.ID)
-	if err != nil {
-		slog.Error("Failed to delete group", "error", err,
-			"group_id", group.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to delete group: %v", err)))
-		return nil
-	}
-
-	slog.Info("Group deleted", "group_name", groupName, "chat_id", message.Chat.ID)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' deleted successfully!", escapeMarkdownV2(groupName)))
-	return nil
-}
-
-func (b *Bot) handleShowGroup(ctx *th.Context, message telego.Message) error {
-	args := strings.Fields(message.Text)
-	if len(args) != 2 {
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /show <group_name>"))
-		return nil
-	}
-
-	groupName := args[1]
-	group, err := b.storage.GetGroup(groupName, message.Chat.ID)
-	if err != nil {
-		slog.Error("Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", message.Chat.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
-		return nil
-	}
-
-	members, err := b.storage.GetGroupMembers(group.ID)
-	if err != nil {
-		slog.Error("Failed to get group members", "error", err,
-			"group_id", group.ID)
-		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
-		return nil
-	}
-
-	if len(members) == 0 {
-		b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' has no members.", escapeMarkdownV2(groupName)))
-		return nil
-	}
-
-	var memberList []string
-	for _, member := range members {
-		if member.Username != "" {
-			memberList = append(memberList, fmt.Sprintf("%s %s \\(%s\\)",
-				escapeMarkdownV2(member.FirstName),
-				escapeMarkdownV2(member.LastName),
-				escapeMarkdownV2(member.Username),
-			))
-		} else {
-			memberList = append(memberList, fmt.Sprintf("%s %s",
-				escapeMarkdownV2(member.FirstName), escapeMarkdownV2(member.LastName)))
+		if keyboard == nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups available to join."))
+			return nil
 		}
+
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to join:"))
+		msg.ReplyMarkup = keyboard
+		msg.ParseMode = "MarkdownV2"
+		_, err = b.bot.SendMessage(context.Background(), msg)
+		if err != nil {
+			slog.Error("Failed to send keyboard", "error", err)
+		}
+		return nil
 	}
 
-	showText := fmt.Sprintf("Members of '%s':\n%s", escapeMarkdownV2(groupName), strings.Join(memberList, "\n"))
-	b.sendMessage(message.Chat.ID, showText)
-	return nil
+	groupName := args[1]
+	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
+		return b.joinGroup(group, message.From, message.Chat.ID)
+	})
+	return err
 }
 
-func (b *Bot) handleHelp(ctx *th.Context, message telego.Message) error {
+func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
+	args := strings.Fields(message.Text)
+	if len(args) < 2 {
+		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "leave")
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+		if keyboard == nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups available to leave."))
+			return nil
+		}
+
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to leave:"))
+		msg.ReplyMarkup = keyboard
+		msg.ParseMode = "MarkdownV2"
+		_, err = b.bot.SendMessage(context.Background(), msg)
+		if err != nil {
+			slog.Error("Failed to send keyboard", "error", err)
+		}
+		return nil
+	}
+
+	groupName := args[1]
+	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
+		return b.leaveGroup(group, message.From.ID, message.Chat.ID)
+	})
+	return err
+}
+
+func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
+	args := strings.Fields(message.Text)
+	if len(args) < 2 {
+		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "mention")
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+		if keyboard == nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups available to mention."))
+			return nil
+		}
+
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to mention:"))
+		msg.ReplyMarkup = keyboard
+		msg.ParseMode = "MarkdownV2"
+		_, err = b.bot.SendMessage(context.Background(), msg)
+		if err != nil {
+			slog.Error("Failed to send keyboard", "error", err)
+		}
+		return nil
+	}
+
+	groupName := args[1]
+	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
+		return b.mentionGroupMembers(group, message.Chat.ID)
+	})
+	return err
+}
+
+func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
+	args := strings.Fields(message.Text)
+	if len(args) < 2 {
+		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "del")
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+		if keyboard == nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups available to delete."))
+			return nil
+		}
+
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to delete:"))
+		msg.ReplyMarkup = keyboard
+		msg.ParseMode = "MarkdownV2"
+		_, err = b.bot.SendMessage(context.Background(), msg)
+		if err != nil {
+			slog.Error("Failed to send keyboard", "error", err)
+		}
+		return nil
+	}
+
+	groupName := args[1]
+	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
+		return b.deleteGroup(group, message.Chat.ID)
+	})
+	return err
+}
+
+func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
+	args := strings.Fields(message.Text)
+	if len(args) < 2 {
+		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "show")
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+		if keyboard == nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups available to show."))
+			return nil
+		}
+
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to show:"))
+		msg.ReplyMarkup = keyboard
+		msg.ParseMode = "MarkdownV2"
+		_, err = b.bot.SendMessage(context.Background(), msg)
+		if err != nil {
+			slog.Error("Failed to send keyboard", "error", err)
+		}
+		return nil
+	}
+
+	groupName := args[1]
+	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
+		return b.showGroupMembers(group, message.Chat.ID)
+	})
+	return err
+}
+
+func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 	helpText := escapeMarkdownV2(`Available commands:
 /new <name> - Create a new mention group
 /join <name> - Join an existing mention group
@@ -325,7 +287,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message telego.Message) error {
 	return nil
 }
 
-func (b *Bot) handleList(ctx *th.Context, message telego.Message) error {
+func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 	groups, err := b.storage.GetGroups(message.Chat.ID)
 	if err != nil {
 		slog.Error("Failed to get groups", "error", err, "chat_id", message.Chat.ID)
@@ -350,65 +312,51 @@ func (b *Bot) handleList(ctx *th.Context, message telego.Message) error {
 	return nil
 }
 
-func (b *Bot) sendMessage(chatID int64, text string) {
-	message := telegoutil.Message(telegoutil.ID(chatID), text)
-	message.ParseMode = "MarkdownV2"
-	_, err := b.bot.SendMessage(context.Background(), message)
-	if err != nil {
-		slog.Error("Failed to send message", "error", err,
-			"chat_id", chatID, "text_length", len(text))
-	}
-}
-
-// logUpdate is a middleware that logs all incoming updates
-func (b *Bot) logUpdate(ctx *th.Context, update telego.Update) error {
-	updateType := "unknown"
-	var details string
-
-	switch {
-	case update.Message != nil:
-		updateType = "message"
-		msg := update.Message
-		details = fmt.Sprintf("from: %d, chat: %d, text: %q",
-			msg.From.ID, msg.Chat.ID, msg.Text)
-	case update.EditedMessage != nil:
-		updateType = "edited_message"
-		msg := update.EditedMessage
-		details = fmt.Sprintf("from: %d, chat: %d, text: %q",
-			msg.From.ID, msg.Chat.ID, msg.Text)
-	case update.CallbackQuery != nil:
-		updateType = "callback_query"
-		cb := update.CallbackQuery
-		details = fmt.Sprintf("from: %d, data: %q", cb.From.ID, cb.Data)
+// handleGroupCallback is a generic handler for group-related callbacks
+func (b *Bot) handleGroupCallback(ctx *th.Context, query t.CallbackQuery) error {
+	if query.Message == nil {
+		return nil
 	}
 
-	slog.Info("Received update",
-		"type", updateType,
-		"update_id", update.UpdateID,
-		"details", details)
+	chatID := query.Message.GetChat().ID
+	parts := strings.Split(query.Data, ":")
+	if len(parts) != 2 {
+		return nil
+	}
+	action := parts[0]
+	groupName := parts[1]
 
-	return ctx.Next(update)
-}
+	switch action {
+	case "join":
+		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
+			return b.joinGroup(group, &query.From, chatID)
+		})
+		return err
 
-func escapeMarkdownV2(text string) string {
-	specialChars := []string{
-		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!", "&", "<",
+	case "leave":
+		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
+			return b.leaveGroup(group, query.From.ID, chatID)
+		})
+		return err
+
+	case "mention":
+		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
+			return b.mentionGroupMembers(group, chatID)
+		})
+		return err
+
+	case "del":
+		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
+			return b.deleteGroup(group, chatID)
+		})
+		return err
+
+	case "show":
+		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
+			return b.showGroupMembers(group, chatID)
+		})
+		return err
 	}
 
-	for _, char := range specialChars {
-		text = strings.ReplaceAll(text, char, "\\"+char)
-	}
-	return text
-}
-
-func isValidGroupName(name string) bool {
-	if len(name) == 0 {
-		return false
-	}
-	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
-			return false
-		}
-	}
-	return true
+	return nil
 }

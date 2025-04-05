@@ -116,3 +116,15 @@ func (s *Storage) GetGroups(chatID int64) ([]MentionGroup, error) {
 	}
 	return groups, nil
 }
+
+// IsMember checks if a user is a member of a group
+func (s *Storage) IsMember(groupID uint, userID int64) (bool, error) {
+	var count int64
+	result := s.db.Model(&GroupMember{}).Where("group_id = ? AND user_id = ?", groupID, userID).Count(&count)
+	if result.Error != nil {
+		slog.Error("Failed to check membership", "error", result.Error,
+			"group_id", groupID, "user_id", userID)
+		return false, fmt.Errorf("failed to check membership: %w", result.Error)
+	}
+	return count > 0, nil
+}
