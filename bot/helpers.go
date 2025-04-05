@@ -17,7 +17,7 @@ import (
 func (b *Bot) executeOnGroup(chatID int64, groupName string, operation func(*storage.MentionGroup) error) error {
 	group, err := b.storage.GetGroup(groupName, chatID)
 	if err != nil {
-		slog.Error("Failed to get group", "error", err,
+		slog.Error("bot: Failed to get group", "error", err,
 			"group_name", groupName, "chat_id", chatID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
 		return err
@@ -30,7 +30,7 @@ func (b *Bot) executeOnGroup(chatID int64, groupName string, operation func(*sto
 func (b *Bot) getGroupMembers(group *storage.MentionGroup, chatID int64) ([]storage.GroupMember, error) {
 	members, err := b.storage.GetGroupMembers(group.ID)
 	if err != nil {
-		slog.Error("Failed to get group members", "error", err,
+		slog.Error("bot: Failed to get group members", "error", err,
 			"group_id", group.ID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
 		return nil, err
@@ -70,36 +70,30 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	return mentions
 }
 
-func (b *Bot) createGroupSelectionKeyboard(chatID int64, prefix string) (*t.InlineKeyboardMarkup, error) {
-	groups, err := b.storage.GetGroups(chatID)
-	if err != nil {
-		slog.Error("Failed to get groups", "error", err, "chat_id", chatID)
-		return nil, err
-	}
-
+func (b *Bot) createReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) (*t.ReplyKeyboardMarkup, error) {
 	if len(groups) == 0 {
 		return nil, nil
 	}
 
 	// Create keyboard with 2 columns
-	keyboard := make([][]t.InlineKeyboardButton, 0, (len(groups)+1)/2)
+	keyboard := make([][]t.KeyboardButton, 0, (len(groups)+1)/2)
 	for i := 0; i < len(groups); i += 2 {
-		row := make([]t.InlineKeyboardButton, 0, 2)
-		row = append(row, t.InlineKeyboardButton{
-			Text:         groups[i].Name,
-			CallbackData: prefix + ":" + groups[i].Name,
+		row := make([]t.KeyboardButton, 0, 2)
+		row = append(row, t.KeyboardButton{
+			Text: fmt.Sprintf("/%s %s", commandPrefix, groups[i].Name),
 		})
 		if i+1 < len(groups) {
-			row = append(row, t.InlineKeyboardButton{
-				Text:         groups[i+1].Name,
-				CallbackData: prefix + ":" + groups[i+1].Name,
+			row = append(row, t.KeyboardButton{
+				Text: fmt.Sprintf("/%s %s", commandPrefix, groups[i+1].Name),
 			})
 		}
 		keyboard = append(keyboard, row)
 	}
 
-	return &t.InlineKeyboardMarkup{
-		InlineKeyboard: keyboard,
+	return &t.ReplyKeyboardMarkup{
+		Keyboard:        keyboard,
+		ResizeKeyboard:  true,
+		OneTimeKeyboard: true,
 	}, nil
 }
 
@@ -141,22 +135,22 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 				// Parse the retry_after value
 				var retryAfter int
 				if _, _ = fmt.Sscanf(parts[1], "%d", &retryAfter); retryAfter > 0 {
-					slog.Debug("API error", "error", err.Error())
-					slog.Info("Rate limit hit, waiting", "seconds", retryAfter)
+					slog.Debug("bot: API error", "error", err.Error())
+					slog.Info("bot: Rate limit hit, waiting", "seconds", retryAfter)
 					time.Sleep(time.Duration(retryAfter) * time.Second)
 					_, retryErr := b.bot.SendMessage(context.Background(), message)
 					if retryErr != nil {
 						err = retryErr
 					} else {
-						slog.Info("Message sent successfully after rate limit wait")
+						slog.Info("bot: Message sent successfully after rate limit wait")
 					}
 				}
 			}
 		}
 		if err != nil {
-			slog.Error("Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
+			slog.Error("bot: Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
 		}
 	} else {
-		slog.Info("Message sent successfully")
+		slog.Info("bot: Message sent successfully")
 	}
 }

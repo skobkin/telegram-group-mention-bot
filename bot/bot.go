@@ -19,12 +19,12 @@ type Bot struct {
 }
 
 func New(token string, storage *storage.Storage) (*Bot, error) {
-	slog.Info("Initializing bot", "token_length", len(token))
+	slog.Info("bot: Initializing bot", "token_length", len(token))
 
 	// Create bot with debug logging
 	bot, err := t.NewBot(token, t.WithDefaultLogger(false, true))
 	if err != nil {
-		slog.Error("Failed to create bot", "error", err, "token_length", len(token))
+		slog.Error("bot: Failed to create bot", "error", err, "token_length", len(token))
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
@@ -38,10 +38,10 @@ func (b *Bot) Start() error {
 	// Get and log bot information
 	me, err := b.bot.GetMe(context.Background())
 	if err != nil {
-		slog.Error("Failed to get bot information", "error", err)
+		slog.Error("bot: Failed to get bot information", "error", err)
 		return fmt.Errorf("failed to get bot information: %w", err)
 	}
-	slog.Info("Bot started",
+	slog.Info("bot: Bot started",
 		"id", me.ID,
 		"username", me.Username,
 		"first_name", me.FirstName,
@@ -55,14 +55,14 @@ func (b *Bot) Start() error {
 	// Get updates channel
 	updates, err := b.bot.UpdatesViaLongPolling(context.Background(), nil)
 	if err != nil {
-		slog.Error("Failed to get updates channel", "error", err)
+		slog.Error("bot: Failed to get updates channel", "error", err)
 		return fmt.Errorf("failed to get updates channel: %w", err)
 	}
 
 	// Create handler with updates channel
 	h, err := th.NewBotHandler(b.bot, updates)
 	if err != nil {
-		slog.Error("Failed to create handler", "error", err)
+		slog.Error("bot: Failed to create handler", "error", err)
 		return fmt.Errorf("failed to create handler: %w", err)
 	}
 
@@ -86,12 +86,11 @@ func (b *Bot) Start() error {
 	h.HandleCallbackQuery(b.handleGroupCallback, th.Or(
 		th.CallbackDataPrefix("join:"),
 		th.CallbackDataPrefix("leave:"),
-		th.CallbackDataPrefix("mention:"),
 		th.CallbackDataPrefix("del:"),
 		th.CallbackDataPrefix("show:"),
 	))
 
-	slog.Info("Starting bot handlers")
+	slog.Info("bot: Starting bot handlers")
 	return h.Start()
 }
 
@@ -110,13 +109,13 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 
 	err := b.storage.CreateGroup(groupName, message.Chat.ID)
 	if err != nil {
-		slog.Error("Failed to create group", "error", err,
+		slog.Error("bot: Failed to create group", "error", err,
 			"group_name", groupName, "chat_id", message.Chat.ID)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create group: %v", err)))
 		return nil
 	}
 
-	slog.Info("Group created", "group_name", groupName, "chat_id", message.Chat.ID)
+	slog.Info("bot: Group created", "group_name", groupName, "chat_id", message.Chat.ID)
 	b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' created successfully\\!\nTo join this group, use: /join %s",
 		escapeMarkdownV2(groupName), escapeMarkdownV2(groupName)))
 	return nil
@@ -125,9 +124,15 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "join")
+		groups, err := b.storage.GetGroupsToJoin(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+
+		keyboard, err := b.createReplyKeyboard("join", groups)
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
 		}
 		if keyboard == nil {
@@ -140,7 +145,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 		msg.ParseMode = "MarkdownV2"
 		_, err = b.bot.SendMessage(context.Background(), msg)
 		if err != nil {
-			slog.Error("Failed to send keyboard", "error", err)
+			slog.Error("bot: Failed to send keyboard", "error", err)
 		}
 		return nil
 	}
@@ -155,9 +160,15 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "leave")
+		groups, err := b.storage.GetGroupsToLeave(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+
+		keyboard, err := b.createReplyKeyboard("leave", groups)
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
 		}
 		if keyboard == nil {
@@ -170,7 +181,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 		msg.ParseMode = "MarkdownV2"
 		_, err = b.bot.SendMessage(context.Background(), msg)
 		if err != nil {
-			slog.Error("Failed to send keyboard", "error", err)
+			slog.Error("bot: Failed to send keyboard", "error", err)
 		}
 		return nil
 	}
@@ -185,9 +196,15 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "mention")
+		groups, err := b.storage.GetGroups(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+
+		keyboard, err := b.createReplyKeyboard("m", groups)
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
 		}
 		if keyboard == nil {
@@ -200,7 +217,7 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 		msg.ParseMode = "MarkdownV2"
 		_, err = b.bot.SendMessage(context.Background(), msg)
 		if err != nil {
-			slog.Error("Failed to send keyboard", "error", err)
+			slog.Error("bot: Failed to send keyboard", "error", err)
 		}
 		return nil
 	}
@@ -215,9 +232,15 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "del")
+		groups, err := b.storage.GetGroups(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+
+		keyboard, err := b.createReplyKeyboard("del", groups)
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
 		}
 		if keyboard == nil {
@@ -230,7 +253,7 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 		msg.ParseMode = "MarkdownV2"
 		_, err = b.bot.SendMessage(context.Background(), msg)
 		if err != nil {
-			slog.Error("Failed to send keyboard", "error", err)
+			slog.Error("bot: Failed to send keyboard", "error", err)
 		}
 		return nil
 	}
@@ -245,9 +268,15 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		keyboard, err := b.createGroupSelectionKeyboard(message.Chat.ID, "show")
+		groups, err := b.storage.GetGroups(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
+			return nil
+		}
+
+		keyboard, err := b.createReplyKeyboard("show", groups)
+		if err != nil {
+			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
 		}
 		if keyboard == nil {
@@ -260,7 +289,7 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 		msg.ParseMode = "MarkdownV2"
 		_, err = b.bot.SendMessage(context.Background(), msg)
 		if err != nil {
-			slog.Error("Failed to send keyboard", "error", err)
+			slog.Error("bot: Failed to send keyboard", "error", err)
 		}
 		return nil
 	}
@@ -290,7 +319,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 	groups, err := b.storage.GetGroups(message.Chat.ID)
 	if err != nil {
-		slog.Error("Failed to get groups", "error", err, "chat_id", message.Chat.ID)
+		slog.Error("bot: Failed to get groups", "error", err, "chat_id", message.Chat.ID)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 		return nil
 	}
@@ -336,12 +365,6 @@ func (b *Bot) handleGroupCallback(ctx *th.Context, query t.CallbackQuery) error 
 	case "leave":
 		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
 			return b.leaveGroup(group, query.From.ID, chatID)
-		})
-		return err
-
-	case "mention":
-		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
-			return b.mentionGroupMembers(group, chatID)
 		})
 		return err
 

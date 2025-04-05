@@ -30,10 +30,7 @@ func (b *Bot) logUpdate(ctx *th.Context, update t.Update) error {
 		details = fmt.Sprintf("from: %d, data: %q", cb.From.ID, cb.Data)
 	}
 
-	slog.Info("Received update",
-		"type", updateType,
-		"update_id", update.UpdateID,
-		"details", details)
+	slog.Info("bot: Incoming update", "type", updateType, "update_id", update.UpdateID, "details", details)
 
 	return ctx.Next(update)
 }

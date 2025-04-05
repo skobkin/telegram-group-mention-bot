@@ -15,7 +15,7 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 	// Check if user is already a member
 	isMember, err := b.storage.IsMember(group.ID, user.ID)
 	if err != nil {
-		slog.Error("Failed to check membership", "error", err, "group_id", group.ID, "user_id", user.ID)
+		slog.Error("bot: Failed to check membership", "error", err, "group_id", group.ID, "user_id", user.ID)
 		return err
 	}
 
@@ -26,13 +26,13 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 
 	err = b.storage.AddMember(group.ID, user.ID, user.Username, user.FirstName, user.LastName)
 	if err != nil {
-		slog.Error("Failed to join group", "error", err,
+		slog.Error("bot: Failed to join group", "error", err,
 			"group_id", group.ID, "user_id", user.ID, "username", user.Username)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to join group: %v", err)))
 		return err
 	}
 
-	slog.Info("User joined group", "group_name", group.Name,
+	slog.Info("bot: User joined group", "group_name", group.Name,
 		"user_id", user.ID, "username", user.Username)
 	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully joined group '%s'!", group.Name)))
 	return nil
@@ -40,15 +40,27 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 
 // leaveGroup removes a user from a mention group
 func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64) error {
-	err := b.storage.RemoveMember(group.ID, userID)
+	// Check if user is a member
+	isMember, err := b.storage.IsMember(group.ID, userID)
 	if err != nil {
-		slog.Error("Failed to leave group", "error", err,
+		slog.Error("bot: Failed to check membership", "error", err, "group_id", group.ID, "user_id", userID)
+		return err
+	}
+
+	if !isMember {
+		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("You are not a member of group '%s'!", group.Name)))
+		return nil
+	}
+
+	err = b.storage.RemoveMember(group.ID, userID)
+	if err != nil {
+		slog.Error("bot: Failed to leave group", "error", err,
 			"group_id", group.ID, "user_id", userID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to leave group: %v", err)))
 		return err
 	}
 
-	slog.Info("User left group", "group_name", group.Name,
+	slog.Info("bot: User left group", "group_name", group.Name,
 		"user_id", userID)
 	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully left group '%s'!", group.Name)))
 	return nil
@@ -62,7 +74,7 @@ func (b *Bot) mentionGroupMembers(group *storage.MentionGroup, chatID int64) err
 	}
 
 	if len(members) == 0 {
-		slog.Info("No members in group", "group_name", group.Name)
+		slog.Info("bot: No members in group", "group_name", group.Name)
 		b.sendMessage(chatID, escapeMarkdownV2("No members in this group!"))
 		return nil
 	}
@@ -87,13 +99,13 @@ func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64) error {
 
 	err = b.storage.DeleteGroup(group.ID)
 	if err != nil {
-		slog.Error("Failed to delete group", "error", err,
+		slog.Error("bot: Failed to delete group", "error", err,
 			"group_id", group.ID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to delete group: %v", err)))
 		return err
 	}
 
-	slog.Info("Group deleted", "group_name", group.Name, "chat_id", chatID)
+	slog.Info("bot: Group deleted", "group_name", group.Name, "chat_id", chatID)
 	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group '%s' deleted successfully!", group.Name)))
 	return nil
 }
