@@ -1,44 +1,60 @@
 package main
 
 import (
-	"git.skobk.in/skobkin/telegram-group-mention-bot/bot"
-	"git.skobk.in/skobkin/telegram-group-mention-bot/db"
-	"github.com/mymmrac/telego"
 	"log/slog"
 	"os"
+
+	"telegram-group-mention-bot/bot"
+	"telegram-group-mention-bot/storage"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	botToken := os.Getenv("TELEGRAM_TOKEN")
+	// Configure structured logging
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
 
-	api, err := telego.NewBot(botToken, telego.WithDefaultDebugLogger())
-	if err != nil {
-		slog.Error("Failed to initialize Telegram API client", err)
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		slog.Warn("Failed to load .env file", "error", err)
+	}
+
+	// Get configuration from environment
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if token == "" {
+		slog.Error("TELEGRAM_BOT_TOKEN environment variable is required")
 		os.Exit(1)
 	}
 
-	storage, err := db.NewStorage("./data.sqlite")
-	if err != nil {
-		slog.Error("Cannot open the storage", err)
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "data.sqlite"
+	}
 
+	// Initialize storage
+	storage, err := storage.New(dbPath)
+	if err != nil {
+		slog.Error("Failed to initialize storage", "error", err)
 		os.Exit(1)
 	}
 
-	err = storage.Migrate()
+	// Initialize bot
+	bot, err := bot.New(token, storage)
 	if err != nil {
-		slog.Error("Cannot migrate the storage", err)
-
+		slog.Error("Failed to initialize bot", "error", err)
 		os.Exit(1)
 	}
 
-	botService := bot.NewBot(api, storage)
-
-	err = botService.Run()
-	if err != nil {
-		slog.Error("Running bot finished with an error", err)
-
+	// Start bot
+	slog.Info("Starting bot...")
+	if err := bot.Start(); err != nil {
+		slog.Error("Failed to start bot", "error", err)
 		os.Exit(1)
 	}
 
-	slog.Info("Exiting")
+	// Wait for interrupt signal
+	select {}
 }
