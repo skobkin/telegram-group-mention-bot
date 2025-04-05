@@ -104,7 +104,7 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message telego.Message) error {
 	}
 
 	slog.Info("Group created", "group_name", groupName, "chat_id", message.Chat.ID)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' created successfully!\nTo join this group, use: /join %s",
+	b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' created successfully\\!\nTo join this group, use: /join %s",
 		escapeMarkdownV2(groupName), escapeMarkdownV2(groupName)))
 	return nil
 }
@@ -136,7 +136,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message telego.Message) error {
 
 	slog.Info("User joined group", "group_name", groupName,
 		"user_id", user.ID, "username", user.Username)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully joined group '%s'!", escapeMarkdownV2(groupName)))
+	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully joined group '%s'\\!", escapeMarkdownV2(groupName)))
 	return nil
 }
 
@@ -166,7 +166,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message telego.Message) error {
 
 	slog.Info("User left group", "group_name", groupName,
 		"user_id", message.From.ID)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully left group '%s'!", escapeMarkdownV2(groupName)))
+	b.sendMessage(message.Chat.ID, fmt.Sprintf("Successfully left group '%s'\\!", escapeMarkdownV2(groupName)))
 	return nil
 }
 
@@ -387,7 +387,7 @@ func (b *Bot) logUpdate(ctx *th.Context, update telego.Update) error {
 
 func escapeMarkdownV2(text string) string {
 	specialChars := []string{
-		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!",
+		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!", "&", "<",
 	}
 
 	for _, char := range specialChars {
