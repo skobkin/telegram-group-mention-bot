@@ -28,6 +28,8 @@ A Telegram bot that allows users to create mention groups and mention all member
 
 ## Getting Started
 
+### From source
+
 1. Create a `.env` file with the following variables:
    ```
    TELEGRAM_BOT_TOKEN=your_bot_token_here
@@ -37,6 +39,17 @@ A Telegram bot that allows users to create mention groups and mention all member
    ```bash
    go run main.go
    ```
+
+### Using Docker
+
+You can also run the bot using Docker:
+
+```bash
+docker run -d \
+  -e TELEGRAM_BOT_TOKEN=your_bot_token_here \
+  -v ./data:/data \
+  skobkin/telegram-group-mention-bot
+```
 
 ## Requirements
 
