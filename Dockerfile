@@ -2,9 +2,12 @@ FROM golang:1-alpine as builder
 
 WORKDIR /build
 
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev
+
 COPY . .
 
-RUN go build -o app
+RUN CGO_ENABLED=1 go build -o app
 
 FROM alpine:latest
 
