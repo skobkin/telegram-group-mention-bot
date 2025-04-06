@@ -249,8 +249,7 @@ func (s *Storage) DeleteGroup(groupID uint) error {
 	return nil
 }
 
-// GetGroups retrieves all groups for a specific chat
-func (s *Storage) GetGroups(chatID int64) ([]MentionGroup, error) {
+func (s *Storage) GetGroupsByChat(chatID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
 	result := s.db.Where("chat_id = ?", chatID).Find(&groups)
 	if result.Error != nil {
@@ -272,7 +271,7 @@ func (s *Storage) IsMember(groupID uint, userID int64) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Storage) GetGroupsToJoin(chatID int64, userID int64) ([]MentionGroup, error) {
+func (s *Storage) GetGroupsToJoinByChatAndUser(chatID int64, userID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
 	result := s.db.Where("chat_id = ? AND id NOT IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
 	if result.Error != nil {
@@ -283,12 +282,26 @@ func (s *Storage) GetGroupsToJoin(chatID int64, userID int64) ([]MentionGroup, e
 	return groups, nil
 }
 
-func (s *Storage) GetGroupsToLeave(chatID int64, userID int64) ([]MentionGroup, error) {
+func (s *Storage) GetGroupsToLeaveByChatAndUser(chatID int64, userID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
 	result := s.db.Where("chat_id = ? AND id IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to get groups to leave", "error", result.Error,
 			"chat_id", chatID, "user_id", userID)
+		return nil, errors.Join(ErrGet, result.Error)
+	}
+	return groups, nil
+}
+
+func (s *Storage) FindGroupsByChatAndNamesWithMembers(chatID int64, names []string) ([]MentionGroup, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	var groups []MentionGroup
+	result := s.db.Where("chat_id = ? AND name IN ?", chatID, names).Preload("Members.User").Find(&groups)
+	if result.Error != nil {
+		slog.Error("storage: Failed to find groups", "error", result.Error, "chat_id", chatID, "names", names)
 		return nil, errors.Join(ErrGet, result.Error)
 	}
 	return groups, nil

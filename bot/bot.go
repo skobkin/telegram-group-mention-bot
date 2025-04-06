@@ -83,6 +83,8 @@ func (b *Bot) Start() error {
 	h.HandleMessage(b.handleDeleteGroup, th.CommandEqual("del"))
 	h.HandleMessage(b.handleShowGroup, th.CommandEqual("show"))
 
+	h.HandleMessage(b.handleFreeFormMessage, th.Not(th.AnyCommand()))
+
 	h.HandleCallbackQuery(b.handleGroupCallback, th.Or(
 		th.CallbackDataPrefix("join:"),
 		th.CallbackDataPrefix("leave:"),
@@ -124,7 +126,7 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		groups, err := b.storage.GetGroupsToJoin(message.Chat.ID, message.From.ID)
+		groups, err := b.storage.GetGroupsToJoinByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -160,7 +162,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		groups, err := b.storage.GetGroupsToLeave(message.Chat.ID, message.From.ID)
+		groups, err := b.storage.GetGroupsToLeaveByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -196,7 +198,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		groups, err := b.storage.GetGroups(message.Chat.ID)
+		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -223,16 +225,25 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
-	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
-		return b.mentionGroupMembers(group, message.Chat.ID)
-	})
-	return err
+	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, []string{groupName})
+	if err != nil {
+		slog.Error("bot: Failed to find group", "error", err, "chat_id", message.Chat.ID, "group_name", groupName)
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to find group: %v", err)))
+		return nil
+	}
+
+	if len(groups) == 0 {
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group '%s' not found.", groupName)))
+		return nil
+	}
+
+	return b.mentionGroups(groups, message.Chat.ID)
 }
 
 func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		groups, err := b.storage.GetGroups(message.Chat.ID)
+		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -268,7 +279,7 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		groups, err := b.storage.GetGroups(message.Chat.ID)
+		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -317,7 +328,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
-	groups, err := b.storage.GetGroups(message.Chat.ID)
+	groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 	if err != nil {
 		slog.Error("bot: Failed to get groups", "error", err, "chat_id", message.Chat.ID)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -379,6 +390,48 @@ func (b *Bot) handleGroupCallback(ctx *th.Context, query t.CallbackQuery) error 
 			return b.showGroupMembers(group, chatID)
 		})
 		return err
+	}
+
+	return nil
+}
+
+func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
+	if !strings.Contains(message.Text, "@") {
+		return nil
+	}
+
+	var groupNames []string
+	// Split the message into words separated by spaces or commas
+	words := strings.FieldsFunc(message.Text, func(r rune) bool {
+		return r == ' ' || r == ','
+	})
+	for _, word := range words {
+		if strings.HasPrefix(word, "@") {
+			// Remove @ and any trailing punctuation (period or comma)
+			name := strings.TrimRight(strings.TrimPrefix(word, "@"), ".,")
+			if isValidGroupName(name) {
+				groupNames = append(groupNames, name)
+			}
+		}
+	}
+
+	if len(groupNames) == 0 {
+		return nil
+	}
+
+	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, groupNames)
+	if err != nil {
+		slog.Error("bot: Failed to find groups", "error", err, "chat_id", message.Chat.ID)
+		return nil
+	}
+
+	if len(groups) == 0 {
+		return nil
+	}
+
+	err = b.mentionGroups(groups, message.Chat.ID)
+	if err != nil {
+		slog.Error("bot: Failed to mention group members", "error", err, "chat_id", message.Chat.ID)
 	}
 
 	return nil

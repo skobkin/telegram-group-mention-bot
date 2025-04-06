@@ -70,21 +70,30 @@ func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64
 	return nil
 }
 
-func (b *Bot) mentionGroupMembers(group *storage.MentionGroup, chatID int64) error {
-	members, err := b.getGroupMembers(group, chatID)
-	if err != nil {
-		return err
-	}
-
-	if len(members) == 0 {
-		slog.Info("bot: No members in group", "group_name", group.Name)
-		b.sendMessage(chatID, escapeMarkdownV2("No members in this group!"))
+func (b *Bot) mentionGroups(groups []storage.MentionGroup, chatID int64) error {
+	if len(groups) == 0 {
 		return nil
 	}
 
-	mentions := b.formatMentions(members)
-	mentionText := fmt.Sprintf("Mentioning %s group members:\n%s", escapeMarkdownV2(group.Name), strings.Join(mentions, ", "))
-	b.sendMessage(chatID, mentionText)
+	var groupMentions []string
+	for _, group := range groups {
+		if len(group.Members) == 0 {
+			continue
+		}
+
+		mentions := b.formatMentions(group.Members)
+		groupMentions = append(groupMentions, fmt.Sprintf("*%s*:\n%s",
+			escapeMarkdownV2(group.Name),
+			strings.Join(mentions, "\n"),
+		))
+	}
+
+	if len(groupMentions) == 0 {
+		b.sendMessage(chatID, escapeMarkdownV2("No members in these groups!"))
+		return nil
+	}
+
+	b.sendMessage(chatID, strings.Join(groupMentions, "\n\n"))
 	return nil
 }
 
