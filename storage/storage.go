@@ -83,6 +83,11 @@ func (s *Storage) migrate() error {
 
 // TODO: This function can be removed in a future release after all users have migrated to the new schema.
 func (s *Storage) migrateUserData() error {
+	// Check if old columns still exist
+	if !s.db.Migrator().HasColumn(&GroupMember{}, "username") {
+		return nil // Migration already completed
+	}
+
 	// Get all existing group members with their user info
 	var oldMembers []struct {
 		ID        uint
