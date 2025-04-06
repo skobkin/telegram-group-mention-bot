@@ -10,7 +10,6 @@ import (
 	t "github.com/mymmrac/telego"
 )
 
-// joinGroup adds a user to a mention group
 func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64) error {
 	// Check if user is already a member
 	isMember, err := b.storage.IsMember(group.ID, user.ID)
@@ -24,7 +23,13 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 		return nil
 	}
 
-	err = b.storage.AddMember(group.ID, user.ID, user.Username, user.FirstName, user.LastName)
+	storageUser := &storage.User{
+		ID:        user.ID,
+		Username:  user.Username,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+	}
+	err = b.storage.AddMember(group.ID, storageUser)
 	if err != nil {
 		slog.Error("bot: Failed to join group", "error", err,
 			"group_id", group.ID, "user_id", user.ID, "username", user.Username)
@@ -38,7 +43,6 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 	return nil
 }
 
-// leaveGroup removes a user from a mention group
 func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64) error {
 	// Check if user is a member
 	isMember, err := b.storage.IsMember(group.ID, userID)
@@ -66,7 +70,6 @@ func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64
 	return nil
 }
 
-// mentionGroupMembers mentions all members of a group
 func (b *Bot) mentionGroupMembers(group *storage.MentionGroup, chatID int64) error {
 	members, err := b.getGroupMembers(group, chatID)
 	if err != nil {
@@ -85,7 +88,6 @@ func (b *Bot) mentionGroupMembers(group *storage.MentionGroup, chatID int64) err
 	return nil
 }
 
-// deleteGroup removes a group if it has no members
 func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64) error {
 	members, err := b.getGroupMembers(group, chatID)
 	if err != nil {
@@ -110,7 +112,6 @@ func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64) error {
 	return nil
 }
 
-// showGroupMembers displays all members of a group without mentioning them
 func (b *Bot) showGroupMembers(group *storage.MentionGroup, chatID int64) error {
 	members, err := b.getGroupMembers(group, chatID)
 	if err != nil {

@@ -42,15 +42,15 @@ func (b *Bot) getGroupMembers(group *storage.MentionGroup, chatID int64) ([]stor
 func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
 	var memberList []string
 	for _, member := range members {
-		if member.Username != "" {
+		if member.User.Username != "" {
 			memberList = append(memberList, escapeMarkdownV2(fmt.Sprintf("%s %s (%s)",
-				member.FirstName,
-				member.LastName,
-				member.Username)))
+				member.User.FirstName,
+				member.User.LastName,
+				member.User.Username)))
 		} else {
 			memberList = append(memberList, escapeMarkdownV2(fmt.Sprintf("%s %s",
-				member.FirstName,
-				member.LastName)))
+				member.User.FirstName,
+				member.User.LastName)))
 		}
 	}
 	return memberList
@@ -60,11 +60,15 @@ func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
 func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	var mentions []string
 	for _, member := range members {
-		if member.Username != "" {
-			mentions = append(mentions, fmt.Sprintf("@%s", member.Username))
+		if member.User.Username != "" {
+			mentions = append(mentions, fmt.Sprintf("@%s", member.User.Username))
 		} else {
-			mentions = append(mentions, fmt.Sprintf("[%s %s](tg://user?id=%d)",
-				escapeMarkdownV2(member.FirstName), escapeMarkdownV2(member.LastName), member.UserID))
+			mentions = append(mentions, fmt.Sprintf(
+				"[%s %s](tg://user?id=%d)",
+				escapeMarkdownV2(member.User.FirstName),
+				escapeMarkdownV2(member.User.LastName),
+				member.UserID,
+			))
 		}
 	}
 	return mentions
@@ -153,4 +157,23 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	} else {
 		slog.Info("bot: Message sent successfully")
 	}
+}
+
+// AddMember adds a user to a mention group
+func (b *Bot) AddMember(groupID uint, userID int64, username, firstName, lastName string) error {
+	// First ensure the user exists in the database
+	user, err := b.storage.CreateOrUpdateUser(userID, username, firstName, lastName)
+	if err != nil {
+		slog.Error("bot: Failed to create/update user", "error", err, "user_id", userID, "username", username)
+		return fmt.Errorf("failed to create/update user: %w", err)
+	}
+
+	// Then add them to the group
+	if err := b.storage.AddMember(groupID, user); err != nil {
+		slog.Error("bot: Failed to add member", "error", err, "group_id", groupID, "user_id", userID, "username", username)
+		return fmt.Errorf("failed to add member: %w", err)
+	}
+
+	slog.Info("bot: User added to group", "group_id", groupID, "user_id", userID, "username", username)
+	return nil
 }

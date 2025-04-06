@@ -1,6 +1,12 @@
 package storage
 
-// MentionGroup represents a group that can be mentioned
+type User struct {
+	ID        int64 `gorm:"primarykey"`
+	Username  string
+	FirstName string
+	LastName  string
+}
+
 type MentionGroup struct {
 	ID      uint          `gorm:"primarykey"`
 	Name    string        `gorm:"uniqueIndex:idx_chat_group"`
@@ -8,13 +14,10 @@ type MentionGroup struct {
 	Members []GroupMember `gorm:"foreignKey:GroupID;constraint:OnDelete:CASCADE"`
 }
 
-// GroupMember represents a user who is a member of a mention group
 type GroupMember struct {
-	ID           uint  `gorm:"primarykey"`
-	GroupID      uint  `gorm:"uniqueIndex:idx_group_user"`
-	UserID       int64 `gorm:"uniqueIndex:idx_group_user"`
-	Username     string
-	FirstName    string
-	LastName     string
+	ID           uint         `gorm:"primarykey"`
+	GroupID      uint         `gorm:"uniqueIndex:idx_group_user"`
+	UserID       int64        `gorm:"uniqueIndex:idx_group_user"`
+	User         User         `gorm:"foreignKey:UserID;references:ID"`
 	MentionGroup MentionGroup `gorm:"foreignKey:GroupID;references:ID"`
 }
