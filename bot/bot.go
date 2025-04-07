@@ -109,6 +109,7 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 		return nil
 	}
 
+	b.sendTyping(tu.ID(message.Chat.ID))
 	err := b.storage.CreateGroup(groupName, message.Chat.ID)
 	if err != nil {
 		slog.Error("bot: Failed to create group", "error", err,
@@ -125,6 +126,9 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 
 func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	if len(args) < 2 {
 		groups, err := b.storage.GetGroupsToJoinByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
@@ -158,6 +162,9 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 
 func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	if len(args) < 2 {
 		groups, err := b.storage.GetGroupsToLeaveByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
@@ -191,6 +198,9 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 
 func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	if len(args) < 2 {
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
@@ -233,6 +243,9 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 
 func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	if len(args) < 2 {
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
@@ -266,6 +279,9 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 
 func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	if len(args) < 2 {
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
@@ -313,6 +329,8 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
+	b.sendTyping(tu.ID(message.Chat.ID))
+
 	groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 	if err != nil {
 		slog.Error("bot: Failed to get groups", "error", err, "chat_id", message.Chat.ID)
@@ -403,6 +421,8 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 	if len(groupNames) == 0 {
 		return nil
 	}
+
+	b.sendTyping(tu.ID(message.Chat.ID))
 
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, groupNames)
 	if err != nil {

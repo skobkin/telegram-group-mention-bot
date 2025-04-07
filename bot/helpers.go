@@ -188,3 +188,11 @@ func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) 
 		MessageID: originalMessage.MessageID,
 	})
 }
+
+func (b *Bot) sendTyping(chatID t.ChatID) {
+	slog.Debug("bot: Setting 'typing' chat action")
+	err := b.bot.SendChatAction(context.Background(), tu.ChatAction(chatID, "typing"))
+	if err != nil {
+		slog.Error("bot: Cannot set chat action", "error", err)
+	}
+}
