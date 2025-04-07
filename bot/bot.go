@@ -68,6 +68,7 @@ func (b *Bot) Start() error {
 
 	// Register update middleware for logging
 	h.Use(b.logUpdate)
+	h.Use(b.migrateChat)
 
 	// Register command handlers
 	h.HandleMessage(b.handleHelp, th.CommandEqual("help"))

@@ -306,3 +306,14 @@ func (s *Storage) FindGroupsByChatAndNamesWithMembers(chatID int64, names []stri
 	}
 	return groups, nil
 }
+
+func (s *Storage) MigrateChatGroups(fromChatID, toChatID int64) error {
+	result := s.db.Model(&MentionGroup{}).Where("chat_id = ?", fromChatID).Update("chat_id", toChatID)
+	if result.Error != nil {
+		slog.Error("storage: Failed to migrate chat groups", "error", result.Error,
+			"from_chat_id", fromChatID, "to_chat_id", toChatID)
+		return errors.Join(ErrUpdate, result.Error)
+	}
+	slog.Info("storage: Migrated chat groups", "from_chat_id", fromChatID, "to_chat_id", toChatID)
+	return nil
+}

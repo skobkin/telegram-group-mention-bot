@@ -49,3 +49,26 @@ func (b *Bot) logUpdate(ctx *th.Context, update t.Update) error {
 
 	return ctx.Next(update)
 }
+
+func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
+	if update.Message == nil {
+		return ctx.Next(update)
+	}
+
+	msg := update.Message
+	if msg.MigrateToChatID == 0 || msg.MigrateFromChatID == 0 {
+		return ctx.Next(update)
+	}
+
+	slog.Info("bot: Chat migration detected", "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
+
+	err := b.storage.MigrateChatGroups(msg.MigrateFromChatID, msg.MigrateToChatID)
+	if err != nil {
+		slog.Error("bot: Failed to migrate chat groups", "error", err, "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
+		return err
+	}
+
+	slog.Info("bot: Chat groups migrated", "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
+
+	return ctx.Next(update)
+}
