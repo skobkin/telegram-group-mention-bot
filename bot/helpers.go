@@ -74,7 +74,7 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	return mentions
 }
 
-func (b *Bot) createReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) (*t.ReplyKeyboardMarkup, error) {
+func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) (*t.ReplyKeyboardMarkup, error) {
 	if len(groups) == 0 {
 		return nil, nil
 	}
@@ -95,9 +95,11 @@ func (b *Bot) createReplyKeyboard(commandPrefix string, groups []storage.Mention
 	}
 
 	return &t.ReplyKeyboardMarkup{
-		Keyboard:        keyboard,
-		ResizeKeyboard:  true,
-		OneTimeKeyboard: true,
+		Keyboard:              keyboard,
+		ResizeKeyboard:        true,
+		OneTimeKeyboard:       true,
+		Selective:             true,
+		InputFieldPlaceholder: "Select group",
 	}, nil
 }
 
@@ -124,9 +126,12 @@ func isValidGroupName(name string) bool {
 	return true
 }
 
-func (b *Bot) sendMessage(chatID int64, text string) {
+func (b *Bot) sendMessage(chatID int64, text string, replyMarkup ...t.ReplyMarkup) {
 	message := tu.Message(tu.ID(chatID), text)
 	message.ParseMode = "MarkdownV2"
+	if len(replyMarkup) > 0 {
+		message.ReplyMarkup = replyMarkup[0]
+	}
 
 	_, err := b.bot.SendMessage(context.Background(), message)
 	if err != nil {
@@ -176,4 +181,10 @@ func (b *Bot) AddMember(groupID uint, userID int64, username, firstName, lastNam
 
 	slog.Info("bot: User added to group", "group_id", groupID, "user_id", userID, "username", username)
 	return nil
+}
+
+func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) *t.SendMessageParams {
+	return newMessage.WithReplyParameters(&t.ReplyParameters{
+		MessageID: originalMessage.MessageID,
+	})
 }

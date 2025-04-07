@@ -132,7 +132,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		keyboard, err := b.createReplyKeyboard("join", groups)
+		keyboard, err := b.createGroupSelectionReplyKeyboard("join", groups)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
@@ -142,14 +142,11 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to join:"))
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to join."))
 		msg.ReplyMarkup = keyboard
 		msg.ParseMode = "MarkdownV2"
-		_, err = b.bot.SendMessage(context.Background(), msg)
-		if err != nil {
-			slog.Error("bot: Failed to send keyboard", "error", err)
-		}
-		return nil
+		_, err = b.bot.SendMessage(context.Background(), b.reply(message, msg))
+		return err
 	}
 
 	groupName := args[1]
@@ -168,7 +165,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		keyboard, err := b.createReplyKeyboard("leave", groups)
+		keyboard, err := b.createGroupSelectionReplyKeyboard("leave", groups)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
@@ -178,14 +175,11 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to leave:"))
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to leave."))
 		msg.ReplyMarkup = keyboard
 		msg.ParseMode = "MarkdownV2"
-		_, err = b.bot.SendMessage(context.Background(), msg)
-		if err != nil {
-			slog.Error("bot: Failed to send keyboard", "error", err)
-		}
-		return nil
+		_, err = b.bot.SendMessage(context.Background(), b.reply(message, msg))
+		return err
 	}
 
 	groupName := args[1]
@@ -204,7 +198,7 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		keyboard, err := b.createReplyKeyboard("m", groups)
+		keyboard, err := b.createGroupSelectionReplyKeyboard("m", groups)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
@@ -214,14 +208,11 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to mention:"))
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to mention."))
 		msg.ReplyMarkup = keyboard
 		msg.ParseMode = "MarkdownV2"
-		_, err = b.bot.SendMessage(context.Background(), msg)
-		if err != nil {
-			slog.Error("bot: Failed to send keyboard", "error", err)
-		}
-		return nil
+		_, err = b.bot.SendMessage(context.Background(), b.reply(message, msg))
+		return err
 	}
 
 	groupName := args[1]
@@ -249,7 +240,7 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		keyboard, err := b.createReplyKeyboard("del", groups)
+		keyboard, err := b.createGroupSelectionReplyKeyboard("del", groups)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
@@ -259,14 +250,11 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to delete:"))
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to delete."))
 		msg.ReplyMarkup = keyboard
 		msg.ParseMode = "MarkdownV2"
-		_, err = b.bot.SendMessage(context.Background(), msg)
-		if err != nil {
-			slog.Error("bot: Failed to send keyboard", "error", err)
-		}
-		return nil
+		_, err = b.bot.SendMessage(context.Background(), b.reply(message, msg))
+		return err
 	}
 
 	groupName := args[1]
@@ -285,7 +273,7 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		keyboard, err := b.createReplyKeyboard("show", groups)
+		keyboard, err := b.createGroupSelectionReplyKeyboard("show", groups)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)))
 			return nil
@@ -295,14 +283,11 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 			return nil
 		}
 
-		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to show:"))
+		msg := tu.Message(tu.ID(message.Chat.ID), escapeMarkdownV2("Select a group to show."))
 		msg.ReplyMarkup = keyboard
 		msg.ParseMode = "MarkdownV2"
-		_, err = b.bot.SendMessage(context.Background(), msg)
-		if err != nil {
-			slog.Error("bot: Failed to send keyboard", "error", err)
-		}
-		return nil
+		_, err = b.bot.SendMessage(context.Background(), b.reply(message, msg))
+		return err
 	}
 
 	groupName := args[1]

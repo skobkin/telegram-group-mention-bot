@@ -39,7 +39,8 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64)
 
 	slog.Info("bot: User joined group", "group_name", group.Name,
 		"user_id", user.ID, "username", user.Username)
-	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully joined group '%s'!", group.Name)))
+	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully joined group '%s'!", group.Name)),
+		&t.ReplyKeyboardRemove{RemoveKeyboard: true, Selective: true})
 	return nil
 }
 
@@ -66,7 +67,8 @@ func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64
 
 	slog.Info("bot: User left group", "group_name", group.Name,
 		"user_id", userID)
-	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully left group '%s'!", group.Name)))
+	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Successfully left group '%s'!", group.Name)),
+		&t.ReplyKeyboardRemove{RemoveKeyboard: true, Selective: true})
 	return nil
 }
 
@@ -93,7 +95,8 @@ func (b *Bot) mentionGroups(groups []storage.MentionGroup, chatID int64) error {
 		return nil
 	}
 
-	b.sendMessage(chatID, strings.Join(groupMentions, "\n\n"))
+	b.sendMessage(chatID, strings.Join(groupMentions, "\n\n"),
+		&t.ReplyKeyboardRemove{RemoveKeyboard: true, Selective: true})
 	return nil
 }
 
@@ -117,7 +120,8 @@ func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64) error {
 	}
 
 	slog.Info("bot: Group deleted", "group_name", group.Name, "chat_id", chatID)
-	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group '%s' deleted successfully!", group.Name)))
+	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group '%s' deleted successfully!", group.Name)),
+		&t.ReplyKeyboardRemove{RemoveKeyboard: true, Selective: true})
 	return nil
 }
 
@@ -134,6 +138,7 @@ func (b *Bot) showGroupMembers(group *storage.MentionGroup, chatID int64) error 
 
 	memberList := b.formatMemberList(members)
 	showText := fmt.Sprintf("Members of '%s':\n%s", escapeMarkdownV2(group.Name), strings.Join(memberList, "\n"))
-	b.sendMessage(chatID, showText)
+	b.sendMessage(chatID, showText,
+		&t.ReplyKeyboardRemove{RemoveKeyboard: true, Selective: true})
 	return nil
 }
