@@ -85,13 +85,6 @@ func (b *Bot) Start() error {
 
 	h.HandleMessage(b.handleFreeFormMessage, th.Not(th.AnyCommand()))
 
-	h.HandleCallbackQuery(b.handleGroupCallback, th.Or(
-		th.CallbackDataPrefix("join:"),
-		th.CallbackDataPrefix("leave:"),
-		th.CallbackDataPrefix("del:"),
-		th.CallbackDataPrefix("show:"),
-	))
-
 	slog.Info("bot: Starting bot handlers")
 	return h.Start()
 }
@@ -352,49 +345,6 @@ func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 
 	listText := header + strings.Join(groupNames, "")
 	b.sendMessage(message.Chat.ID, listText)
-	return nil
-}
-
-// handleGroupCallback is a generic handler for group-related callbacks
-func (b *Bot) handleGroupCallback(ctx *th.Context, query t.CallbackQuery) error {
-	if query.Message == nil {
-		return nil
-	}
-
-	chatID := query.Message.GetChat().ID
-	parts := strings.Split(query.Data, ":")
-	if len(parts) != 2 {
-		return nil
-	}
-	action := parts[0]
-	groupName := parts[1]
-
-	switch action {
-	case "join":
-		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
-			return b.joinGroup(group, &query.From, chatID)
-		})
-		return err
-
-	case "leave":
-		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
-			return b.leaveGroup(group, query.From.ID, chatID)
-		})
-		return err
-
-	case "del":
-		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
-			return b.deleteGroup(group, chatID)
-		})
-		return err
-
-	case "show":
-		err := b.executeOnGroup(chatID, groupName, func(group *storage.MentionGroup) error {
-			return b.showGroupMembers(group, chatID)
-		})
-		return err
-	}
-
 	return nil
 }
 
