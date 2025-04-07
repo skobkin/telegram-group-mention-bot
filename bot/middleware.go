@@ -38,7 +38,7 @@ func (b *Bot) logUpdate(ctx *th.Context, update t.Update) error {
 		} else {
 			text = "[redacted]"
 		}
-		details = fmt.Sprintf("from: %d, chat: %d, text: %q", msg.From.ID, msg.Chat.ID, text)
+		details = fmt.Sprintf("chat_type: %s, from: %d, chat: %d, text: %q", msg.Chat.Type, msg.From.ID, msg.Chat.ID, text)
 	case update.CallbackQuery != nil:
 		updateType = "callback_query"
 		cb := update.CallbackQuery
