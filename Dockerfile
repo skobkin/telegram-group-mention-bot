@@ -20,4 +20,4 @@ VOLUME /data
 ENV TELEGRAM_BOT_TOKEN="" \
     DATABASE_PATH="/data/data.sqlite"
 
-CMD ["/app/app"]
+CMD ["/app/app", "-v"]
