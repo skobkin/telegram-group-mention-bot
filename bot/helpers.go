@@ -74,8 +74,10 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	var mentions []string
 	for _, member := range members {
 		if member.User.Username != "" {
+			// Usernames are safe to use with @ as they can only contain [A-Za-z0-9_]
 			mentions = append(mentions, fmt.Sprintf("@%s", member.User.Username))
 		} else {
+			// For users without username, we need to escape the name parts but not the tg:// URL
 			mentions = append(mentions, fmt.Sprintf(
 				"[%s %s](tg://user?id=%d)",
 				escapeMarkdownV2(member.User.FirstName),
@@ -125,16 +127,17 @@ func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []s
 func escapeMarkdownV2(text string) string {
 	slog.Debug("bot:helpers: Escaping markdown", "input_text", text)
 
-	specialChars := []string{
-		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!", "&", "<",
+	var result strings.Builder
+	for _, r := range text {
+		// Only escape non-alphanumeric ASCII characters (codes 1-126)
+		if r > 0 && r < 127 && !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			result.WriteRune('\\')
+		}
+		result.WriteRune(r)
 	}
 
-	for _, char := range specialChars {
-		text = strings.ReplaceAll(text, char, "\\"+char)
-	}
-
-	slog.Debug("bot:helpers: Markdown escaped", "output_text", text)
-	return text
+	slog.Debug("bot:helpers: Markdown escaped", "output_text", result.String())
+	return result.String()
 }
 
 func isValidGroupName(name string) bool {
