@@ -75,7 +75,7 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	for _, member := range members {
 		if member.User.Username != "" {
 			// Usernames are safe to use with @ as they can only contain [A-Za-z0-9_]
-			mentions = append(mentions, fmt.Sprintf("@%s", member.User.Username))
+			mentions = append(mentions, fmt.Sprintf("@%s", escapeMarkdownV2(member.User.Username)))
 		} else {
 			// For users without username, we need to escape the name parts but not the tg:// URL
 			mentions = append(mentions, fmt.Sprintf(
