@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"strings"
 
 	"telegram-group-mention-bot/bot"
 	"telegram-group-mention-bot/storage"
@@ -75,10 +76,28 @@ func main() {
 	select {}
 }
 
-// setLogLevel configures the logging level based on the provided flags
+// setLogLevel configures the logging level based on the provided flags and environment variable
 func setLogLevel(verbose, veryVerbose bool) {
-	// Determine logging level based on flags
+	// Determine logging level based on flags and environment variable
 	logLevel := slog.LevelWarn // Default level
+
+	// Check environment variable first
+	if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
+		switch strings.ToLower(envLevel) {
+		case "debug":
+			logLevel = slog.LevelDebug
+		case "info":
+			logLevel = slog.LevelInfo
+		case "warn":
+			logLevel = slog.LevelWarn
+		case "error":
+			logLevel = slog.LevelError
+		default:
+			slog.Warn("main: Invalid LOG_LEVEL value", "value", envLevel)
+		}
+	}
+
+	// Command-line flags take precedence over environment variable
 	if veryVerbose {
 		logLevel = slog.LevelDebug
 	} else if verbose {
