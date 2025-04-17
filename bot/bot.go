@@ -19,7 +19,7 @@ type Bot struct {
 }
 
 func New(token string, storage *storage.Storage) (*Bot, error) {
-	slog.Info("bot: Initializing bot", "token_length", len(token))
+	slog.Debug("bot: Creating new bot instance", "token_length", len(token))
 
 	// Create bot with debug logging
 	bot, err := t.NewBot(token, t.WithDefaultLogger(false, true))
@@ -28,6 +28,7 @@ func New(token string, storage *storage.Storage) (*Bot, error) {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
+	slog.Debug("bot: Bot instance created successfully")
 	return &Bot{
 		bot:     bot,
 		storage: storage,
@@ -53,24 +54,30 @@ func (b *Bot) Start() error {
 	)
 
 	// Get updates channel
+	slog.Debug("bot: Getting updates channel")
 	updates, err := b.bot.UpdatesViaLongPolling(context.Background(), nil)
 	if err != nil {
 		slog.Error("bot: Failed to get updates channel", "error", err)
 		return fmt.Errorf("failed to get updates channel: %w", err)
 	}
+	slog.Debug("bot: Updates channel obtained successfully")
 
 	// Create handler with updates channel
+	slog.Debug("bot: Creating bot handler")
 	h, err := th.NewBotHandler(b.bot, updates)
 	if err != nil {
 		slog.Error("bot: Failed to create handler", "error", err)
 		return fmt.Errorf("failed to create handler: %w", err)
 	}
+	slog.Debug("bot: Bot handler created successfully")
 
 	// Register update middleware for logging
+	slog.Debug("bot: Registering middleware")
 	h.Use(b.logUpdate)
 	h.Use(b.migrateChat)
 
 	// Register command handlers
+	slog.Debug("bot: Registering command handlers")
 	h.HandleMessage(b.handleHelp, th.CommandEqual("help"))
 	h.HandleMessage(b.handleList, th.CommandEqual("list"))
 	h.HandleMessage(b.handleNewGroup, th.CommandEqual("new"))
@@ -91,19 +98,24 @@ func (b *Bot) Start() error {
 }
 
 func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling new group command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 	if len(args) != 2 {
+		slog.Debug("bot: Invalid new group command format", "args_count", len(args))
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Usage: /new <group_name>\nGroup name can only contain lowercase letters, numbers, and dashes."))
 		return nil
 	}
 
 	groupName := strings.ToLower(args[1])
 	if !isValidGroupName(groupName) {
+		slog.Debug("bot: Invalid group name", "group_name", groupName)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2("Invalid group name. Group name can only contain lowercase letters, numbers, and dashes."))
 		return nil
 	}
 
 	b.sendTyping(tu.ID(message.Chat.ID))
+	slog.Debug("bot: Creating new group", "group_name", groupName, "chat_id", message.Chat.ID)
 	err := b.storage.CreateGroup(groupName, message.Chat.ID)
 	if err != nil {
 		slog.Error("bot: Failed to create group", "error", err,
@@ -119,11 +131,14 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling join command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	if len(args) < 2 {
+		slog.Debug("bot: No group name provided for join command, showing available groups")
 		groups, err := b.storage.GetGroupsToJoinByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -148,6 +163,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
+	slog.Debug("bot: Joining group", "group_name", groupName, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
 		return b.joinGroup(group, message.From, message.Chat.ID)
 	})
@@ -155,11 +171,14 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling leave command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	if len(args) < 2 {
+		slog.Debug("bot: No group name provided for leave command, showing available groups")
 		groups, err := b.storage.GetGroupsToLeaveByChatAndUser(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -184,6 +203,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
+	slog.Debug("bot: Leaving group", "group_name", groupName, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
 		return b.leaveGroup(group, message.From.ID, message.Chat.ID)
 	})
@@ -191,11 +211,14 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling mention command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	if len(args) < 2 {
+		slog.Debug("bot: No group name provided for mention command, showing available groups")
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -220,6 +243,7 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
+	slog.Debug("bot: Mentioning group", "group_name", groupName, "chat_id", message.Chat.ID)
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, []string{groupName})
 	if err != nil {
 		slog.Error("bot: Failed to find group", "error", err, "chat_id", message.Chat.ID, "group_name", groupName)
@@ -228,19 +252,24 @@ func (b *Bot) handleMention(ctx *th.Context, message t.Message) error {
 	}
 
 	if len(groups) == 0 {
+		slog.Debug("bot: Group not found", "group_name", groupName, "chat_id", message.Chat.ID)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group '%s' not found.", groupName)))
 		return nil
 	}
 
+	slog.Debug("bot: Found group for mention", "group_name", groupName, "group_id", groups[0].ID, "member_count", len(groups[0].Members))
 	return b.mentionGroups(groups, message.Chat.ID)
 }
 
 func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling delete group command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	if len(args) < 2 {
+		slog.Debug("bot: No group name provided for delete command, showing available groups")
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -265,6 +294,7 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
+	slog.Debug("bot: Deleting group", "group_name", groupName, "chat_id", message.Chat.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
 		return b.deleteGroup(group, message.Chat.ID)
 	})
@@ -272,11 +302,14 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling show group command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	args := strings.Fields(message.Text)
 
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	if len(args) < 2 {
+		slog.Debug("bot: No group name provided for show command, showing available groups")
 		groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
@@ -301,6 +334,7 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 	}
 
 	groupName := args[1]
+	slog.Debug("bot: Showing group", "group_name", groupName, "chat_id", message.Chat.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, func(group *storage.MentionGroup) error {
 		return b.showGroupMembers(group, message.Chat.ID)
 	})
@@ -308,6 +342,8 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling help command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	helpText := escapeMarkdownV2(`Available commands:
 /new <name> - Create a new mention group
 /join <name> - Join an existing mention group
@@ -323,6 +359,8 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling list command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
@@ -333,10 +371,12 @@ func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 	}
 
 	if len(groups) == 0 {
+		slog.Debug("bot: No groups found for chat", "chat_id", message.Chat.ID)
 		b.sendMessage(message.Chat.ID, escapeMarkdownV2("No groups found in this chat."))
 		return nil
 	}
 
+	slog.Debug("bot: Listing groups", "chat_id", message.Chat.ID, "group_count", len(groups))
 	header := "Groups in this chat:\n"
 	var groupNames []string
 	for _, group := range groups {
@@ -350,7 +390,10 @@ func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 }
 
 func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling free form message", "chat_id", message.Chat.ID, "from_user_id", message.From.ID, "text_length", len(message.Text))
+
 	if !strings.Contains(message.Text, "@") {
+		slog.Debug("bot: Message does not contain @ mentions, skipping", "chat_id", message.Chat.ID)
 		return nil
 	}
 
@@ -370,9 +413,11 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 	}
 
 	if len(groupNames) == 0 {
+		slog.Debug("bot: No valid group names found in message", "chat_id", message.Chat.ID)
 		return nil
 	}
 
+	slog.Debug("bot: Found group mentions in message", "chat_id", message.Chat.ID, "group_names", groupNames)
 	b.sendTyping(tu.ID(message.Chat.ID))
 
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, groupNames)
@@ -382,9 +427,11 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 	}
 
 	if len(groups) == 0 {
+		slog.Debug("bot: No groups found for mentions", "chat_id", message.Chat.ID, "group_names", groupNames)
 		return nil
 	}
 
+	slog.Debug("bot: Found groups for mentions", "chat_id", message.Chat.ID, "group_count", len(groups))
 	err = b.mentionGroups(groups, message.Chat.ID)
 	if err != nil {
 		slog.Error("bot: Failed to mention group members", "error", err, "chat_id", message.Chat.ID)

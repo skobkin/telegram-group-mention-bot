@@ -15,31 +15,40 @@ import (
 
 // executeOnGroup executes a function on a group if it exists
 func (b *Bot) executeOnGroup(chatID int64, groupName string, operation func(*storage.MentionGroup) error) error {
+	slog.Debug("bot:helpers: Requested operation execution on group", "chat_id", chatID, "group_name", groupName)
+
 	group, err := b.storage.GetGroup(groupName, chatID)
 	if err != nil {
-		slog.Error("bot: Failed to get group", "error", err,
+		slog.Error("bot:helpers: Failed to get group", "error", err,
 			"group_name", groupName, "chat_id", chatID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
 		return err
 	}
 
+	slog.Debug("bot:helpers: Group found, executing operation", "group_id", group.ID, "group_name", group.Name)
 	return operation(group)
 }
 
 // getGroupMembers retrieves all members of a group and handles any errors
 func (b *Bot) getGroupMembers(group *storage.MentionGroup, chatID int64) ([]storage.GroupMember, error) {
+	slog.Debug("bot:helpers: Getting group members", "group_id", group.ID, "group_name", group.Name, "chat_id", chatID)
+
 	members, err := b.storage.GetGroupMembers(group.ID)
 	if err != nil {
-		slog.Error("bot: Failed to get group members", "error", err,
+		slog.Error("bot:helpers: Failed to get group members", "error", err,
 			"group_id", group.ID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
 		return nil, err
 	}
+
+	slog.Debug("bot:helpers: Retrieved group members", "group_id", group.ID, "member_count", len(members))
 	return members, nil
 }
 
 // formatMemberList formats a list of members for display
 func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
+	slog.Debug("bot:helpers: Formatting member list", "member_count", len(members))
+
 	var memberList []string
 	for _, member := range members {
 		if member.User.Username != "" {
@@ -53,11 +62,15 @@ func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
 				member.User.LastName)))
 		}
 	}
+
+	slog.Debug("bot:helpers: Member list formatted", "formatted_count", len(memberList))
 	return memberList
 }
 
 // formatMentions formats a list of members for mentioning
 func (b *Bot) formatMentions(members []storage.GroupMember) []string {
+	slog.Debug("bot:helpers: Formatting mentions", "member_count", len(members))
+
 	var mentions []string
 	for _, member := range members {
 		if member.User.Username != "" {
@@ -71,11 +84,16 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 			))
 		}
 	}
+
+	slog.Debug("bot:helpers: Mentions formatted", "mention_count", len(mentions))
 	return mentions
 }
 
 func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) (*t.ReplyKeyboardMarkup, error) {
+	slog.Debug("bot:helpers: Creating group selection keyboard", "command_prefix", commandPrefix, "group_count", len(groups))
+
 	if len(groups) == 0 {
+		slog.Debug("bot:helpers: No groups available for keyboard, returning nil")
 		return nil, nil
 	}
 
@@ -94,6 +112,7 @@ func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []s
 		keyboard = append(keyboard, row)
 	}
 
+	slog.Debug("bot:helpers: Group selection keyboard created", "row_count", len(keyboard))
 	return &t.ReplyKeyboardMarkup{
 		Keyboard:              keyboard,
 		ResizeKeyboard:        true,
@@ -104,6 +123,8 @@ func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []s
 }
 
 func escapeMarkdownV2(text string) string {
+	slog.Debug("bot:helpers: Escaping markdown", "input_text", text)
+
 	specialChars := []string{
 		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!", "&", "<",
 	}
@@ -111,22 +132,32 @@ func escapeMarkdownV2(text string) string {
 	for _, char := range specialChars {
 		text = strings.ReplaceAll(text, char, "\\"+char)
 	}
+
+	slog.Debug("bot:helpers: Markdown escaped", "output_text", text)
 	return text
 }
 
 func isValidGroupName(name string) bool {
+	slog.Debug("bot:helpers: Validating group name", "name", name)
+
 	if len(name) == 0 {
+		slog.Debug("bot:helpers: Group name is empty")
 		return false
 	}
 	for _, c := range name {
 		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			slog.Debug("bot:helpers: Group name contains invalid character", "char", string(c))
 			return false
 		}
 	}
+
+	slog.Debug("bot:helpers: Group name is valid")
 	return true
 }
 
 func (b *Bot) sendMessage(chatID int64, text string, replyMarkup ...t.ReplyMarkup) {
+	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text", text, "has_reply_markup", len(replyMarkup) > 0)
+
 	message := tu.Message(tu.ID(chatID), text)
 	message.ParseMode = "MarkdownV2"
 	if len(replyMarkup) > 0 {
@@ -144,55 +175,57 @@ func (b *Bot) sendMessage(chatID int64, text string, replyMarkup ...t.ReplyMarku
 				// Parse the retry_after value
 				var retryAfter int
 				if _, _ = fmt.Sscanf(parts[1], "%d", &retryAfter); retryAfter > 0 {
-					slog.Debug("bot: API error", "error", err.Error())
-					slog.Info("bot: Rate limit hit, waiting", "seconds", retryAfter)
+					slog.Info("bot:helpers: Rate limit hit, waiting", "seconds", retryAfter)
 					time.Sleep(time.Duration(retryAfter) * time.Second)
 					_, retryErr := b.bot.SendMessage(context.Background(), message)
 					if retryErr != nil {
 						err = retryErr
 					} else {
-						slog.Info("bot: Message sent successfully after rate limit wait")
+						slog.Info("bot:helpers: Message sent successfully after rate limit wait")
 					}
 				}
 			}
 		}
 		if err != nil {
-			slog.Error("bot: Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
+			slog.Error("bot:helpers: Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
 		}
 	} else {
-		slog.Info("bot: Message sent successfully")
+		slog.Debug("bot:helpers: Message sent successfully")
 	}
 }
 
 // AddMember adds a user to a mention group
 func (b *Bot) AddMember(groupID uint, userID int64, username, firstName, lastName string) error {
+	slog.Debug("bot:helpers: Adding member to group", "group_id", groupID, "user_id", userID, "username", username)
+
 	// First ensure the user exists in the database
 	user, err := b.storage.CreateOrUpdateUser(userID, username, firstName, lastName)
 	if err != nil {
-		slog.Error("bot: Failed to create/update user", "error", err, "user_id", userID, "username", username)
+		slog.Error("bot:helpers: Failed to create/update user", "error", err, "user_id", userID, "username", username)
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
 
 	// Then add them to the group
 	if err := b.storage.AddMember(groupID, user); err != nil {
-		slog.Error("bot: Failed to add member", "error", err, "group_id", groupID, "user_id", userID, "username", username)
+		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID, "username", username)
 		return fmt.Errorf("failed to add member: %w", err)
 	}
 
-	slog.Info("bot: User added to group", "group_id", groupID, "user_id", userID, "username", username)
+	slog.Info("bot:helpers: User added to group", "group_id", groupID, "user_id", userID, "username", username)
 	return nil
 }
 
 func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) *t.SendMessageParams {
+	slog.Debug("bot:helpers: Creating reply message", "original_message_id", originalMessage.MessageID)
 	return newMessage.WithReplyParameters(&t.ReplyParameters{
 		MessageID: originalMessage.MessageID,
 	})
 }
 
 func (b *Bot) sendTyping(chatID t.ChatID) {
-	slog.Debug("bot: Setting 'typing' chat action")
+	slog.Debug("bot:helpers: Setting 'typing' chat action", "chat_id", chatID)
 	err := b.bot.SendChatAction(context.Background(), tu.ChatAction(chatID, "typing"))
 	if err != nil {
-		slog.Error("bot: Cannot set chat action", "error", err)
+		slog.Error("bot:helpers: Cannot set chat action", "error", err)
 	}
 }
