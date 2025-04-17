@@ -51,6 +51,20 @@ docker run -d \
   skobkin/telegram-group-mention-bot
 ```
 
+## Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from [@BotFather](https://t.me/botfather) | (required) |
+| `DATABASE_PATH` | Path to the SQLite database file | `data.sqlite` |
+| `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `warn` |
+
+You can also control logging verbosity using command-line flags:
+- `-v` - Enable verbose logging (LevelInfo)
+- `-vv` - Enable very verbose logging (LevelDebug)
+
+Note: Command-line flags take precedence over the `LOG_LEVEL` environment variable.
+
 ## Requirements
 
 - Go 1.16 or later
