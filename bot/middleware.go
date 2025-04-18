@@ -56,6 +56,39 @@ func (b *Bot) logUpdate(ctx *th.Context, update t.Update) error {
 	return ctx.Next(update)
 }
 
+// syncUserData is a middleware that updates user data when a new message arrives in a group or supergroup chat
+func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
+	if update.Message == nil || update.Message.From == nil {
+		return ctx.Next(update)
+	}
+
+	msg := update.Message
+	from := msg.From
+
+	// Only process messages from group or supergroup chats
+	if msg.Chat.Type != t.ChatTypeGroup && msg.Chat.Type != t.ChatTypeSupergroup {
+		return ctx.Next(update)
+	}
+
+	slog.Debug("bot:middleware: Updating user data", "user_id", from.ID, "username", from.Username, "first_name", from.FirstName, "last_name", from.LastName, "chat_id", msg.Chat.ID, "chat_type", msg.Chat.Type)
+
+	// Update user data in the database
+	_, err := b.storage.CreateOrUpdateUser(
+		from.ID,
+		from.Username,
+		from.FirstName,
+		from.LastName,
+	)
+	if err != nil {
+		slog.Error("bot:middleware: Failed to update user data",
+			"user_id", from.ID,
+			"username", from.Username,
+			"error", err)
+	}
+
+	return ctx.Next(update)
+}
+
 func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
 	if update.Message == nil {
 		return ctx.Next(update)
