@@ -75,6 +75,7 @@ func (b *Bot) Start() error {
 	slog.Debug("bot: Registering middleware")
 	h.Use(b.logUpdate)
 	h.Use(b.syncUserData)
+	h.Use(b.addToAllGroup)
 	h.Use(b.migrateChat)
 
 	// Register command handlers
