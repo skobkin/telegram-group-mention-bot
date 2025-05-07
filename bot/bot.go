@@ -453,7 +453,6 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 	}
 
 	slog.Debug("bot: Found group mentions in message", "chat_id", message.Chat.ID, "group_names", groupNames)
-	b.sendTyping(tu.ID(message.Chat.ID))
 
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(message.Chat.ID, groupNames)
 	if err != nil {
@@ -465,6 +464,8 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 		slog.Debug("bot: No groups found for mentions", "chat_id", message.Chat.ID, "group_names", groupNames)
 		return nil
 	}
+
+	b.sendTyping(tu.ID(message.Chat.ID))
 
 	slog.Debug("bot: Found groups for mentions", "chat_id", message.Chat.ID, "group_count", len(groups))
 	err = b.mentionGroups(groups, message.Chat.ID)
