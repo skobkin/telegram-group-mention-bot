@@ -14,35 +14,19 @@ import (
 )
 
 // executeOnGroup executes a function on a group if it exists
-func (b *Bot) executeOnGroup(chatID int64, groupName string, operation func(*storage.MentionGroup) error) error {
+func (b *Bot) executeOnGroup(chatID int64, groupName string, originalMessage *t.Message, operation func(*storage.MentionGroup, *t.Message) error) error {
 	slog.Debug("bot:helpers: Requested operation execution on group", "chat_id", chatID, "group_name", groupName)
 
 	group, err := b.storage.GetGroup(groupName, chatID)
 	if err != nil {
 		slog.Error("bot:helpers: Failed to get group", "error", err,
 			"group_name", groupName, "chat_id", chatID)
-		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)))
+		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
 		return err
 	}
 
 	slog.Debug("bot:helpers: Group found, executing operation", "group_id", group.ID, "group_name", group.Name)
-	return operation(group)
-}
-
-// getGroupMembers retrieves all members of a group and handles any errors
-func (b *Bot) getGroupMembers(group *storage.MentionGroup, chatID int64) ([]storage.GroupMember, error) {
-	slog.Debug("bot:helpers: Getting group members", "group_id", group.ID, "group_name", group.Name, "chat_id", chatID)
-
-	members, err := b.storage.GetGroupMembers(group.ID)
-	if err != nil {
-		slog.Error("bot:helpers: Failed to get group members", "error", err,
-			"group_id", group.ID)
-		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Failed to get group members: %v", err)))
-		return nil, err
-	}
-
-	slog.Debug("bot:helpers: Retrieved group members", "group_id", group.ID, "member_count", len(members))
-	return members, nil
+	return operation(group, originalMessage)
 }
 
 // formatMemberList formats a list of members for display
@@ -158,13 +142,17 @@ func isValidGroupName(name string) bool {
 	return true
 }
 
-func (b *Bot) sendMessage(chatID int64, text string, replyMarkup ...t.ReplyMarkup) {
-	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text", text, "has_reply_markup", len(replyMarkup) > 0)
+func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
+	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text", text, "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
 
 	message := tu.Message(tu.ID(chatID), text)
 	message.ParseMode = "MarkdownV2"
 	if len(replyMarkup) > 0 {
 		message.ReplyMarkup = replyMarkup[0]
+	}
+
+	if originalMessage != nil {
+		message = b.reply(*originalMessage, message)
 	}
 
 	_, err := b.bot.SendMessage(context.Background(), message)

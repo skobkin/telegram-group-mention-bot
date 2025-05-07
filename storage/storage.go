@@ -154,7 +154,7 @@ func (s *Storage) GetGroup(name string, chatID int64) (*MentionGroup, error) {
 	var group MentionGroup
 	result := s.db.Where("name = ? AND chat_id = ?", name, chatID).First(&group)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.Join(ErrNotFound, result.Error)
 		}
 		slog.Error("storage: Failed to get group", "error", result.Error, "name", name, "chat_id", chatID)
@@ -168,7 +168,7 @@ func (s *Storage) GetUser(userID int64) (*User, error) {
 	var user User
 	result := s.db.First(&user, userID)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.Join(ErrNotFound, result.Error)
 		}
 		slog.Error("storage: Failed to get user", "error", result.Error, "user_id", userID)

@@ -131,7 +131,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	slog.Debug("bot:middleware: Checking for 'all' group", "chat_id", msg.Chat.ID, "user_id", from.ID)
 
 	// Check if "all" group exists in this chat
-	allGroup, err := b.storage.GetGroup("all", msg.Chat.ID)
+	allGroup, err := b.storage.GetGroup(groupNameAll, msg.Chat.ID)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			slog.Debug("bot:middleware: 'all' group not found", "chat_id", msg.Chat.ID)
