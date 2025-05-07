@@ -282,11 +282,11 @@ func (s *Storage) GetGroupsToJoinByChatAndUser(chatID int64, userID int64) ([]Me
 	return groups, nil
 }
 
-func (s *Storage) GetGroupsToLeaveByChatAndUser(chatID int64, userID int64) ([]MentionGroup, error) {
+func (s *Storage) GetUserGroupsByChat(chatID int64, userID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
 	result := s.db.Where("chat_id = ? AND id IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
 	if result.Error != nil {
-		slog.Error("storage: Failed to get groups to leave", "error", result.Error,
+		slog.Error("storage: Failed to get user's groups", "error", result.Error,
 			"chat_id", chatID, "user_id", userID)
 		return nil, errors.Join(ErrGet, result.Error)
 	}

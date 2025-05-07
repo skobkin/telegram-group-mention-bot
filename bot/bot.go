@@ -82,6 +82,7 @@ func (b *Bot) Start() error {
 	slog.Debug("bot: Registering command handlers")
 	h.HandleMessage(b.handleHelp, th.CommandEqual("help"))
 	h.HandleMessage(b.handleList, th.CommandEqual("list"))
+	h.HandleMessage(b.handleMy, th.CommandEqual("my"))
 	h.HandleMessage(b.handleNewGroup, th.CommandEqual("new"))
 	h.HandleMessage(b.handleJoin, th.CommandEqual("join"))
 	h.HandleMessage(b.handleLeave, th.CommandEqual("leave"))
@@ -181,7 +182,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 
 	if len(args) < 2 {
 		slog.Debug("bot: No group name provided for leave command, showing available groups")
-		groups, err := b.storage.GetGroupsToLeaveByChatAndUser(message.Chat.ID, message.From.ID)
+		groups, err := b.storage.GetUserGroupsByChat(message.Chat.ID, message.From.ID)
 		if err != nil {
 			b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)))
 			return nil
@@ -354,6 +355,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 /show <name> - Show all members of a group without mentioning them
 /del <name> - Delete a group (only if it has no members)
 /list - Show all groups in this chat
+/my - Show groups you've joined in this chat
 /help - Show this help message`)
 
 	b.sendMessage(message.Chat.ID, helpText)
@@ -380,6 +382,37 @@ func (b *Bot) handleList(ctx *th.Context, message t.Message) error {
 
 	slog.Debug("bot: Listing groups", "chat_id", message.Chat.ID, "group_count", len(groups))
 	header := "Groups in this chat:\n"
+	var groupNames []string
+	for _, group := range groups {
+		groupText := fmt.Sprintf("• %s\n", escapeMarkdownV2(group.Name))
+		groupNames = append(groupNames, groupText)
+	}
+
+	listText := header + strings.Join(groupNames, "")
+	b.sendMessage(message.Chat.ID, listText)
+	return nil
+}
+
+func (b *Bot) handleMy(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling my command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
+	groups, err := b.storage.GetUserGroupsByChat(message.Chat.ID, message.From.ID)
+	if err != nil {
+		slog.Error("bot: Failed to get user's groups", "error", err, "chat_id", message.Chat.ID, "user_id", message.From.ID)
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get your groups: %v", err)))
+		return nil
+	}
+
+	if len(groups) == 0 {
+		slog.Debug("bot: No groups found for user", "chat_id", message.Chat.ID, "user_id", message.From.ID)
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2("You haven't joined any groups in this chat."))
+		return nil
+	}
+
+	slog.Debug("bot: Listing user's groups", "chat_id", message.Chat.ID, "user_id", message.From.ID, "group_count", len(groups))
+	header := "Groups you've joined in this chat:\n"
 	var groupNames []string
 	for _, group := range groups {
 		groupText := fmt.Sprintf("• %s\n", escapeMarkdownV2(group.Name))

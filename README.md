@@ -24,6 +24,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 | `/show <name>` | Show all members of a group without mentioning them |
 | `/del <name>` | Delete a group (only if it has no members) |
 | `/list` | Show all groups in this chat |
+| `/my` | Show groups you've joined in this chat |
 | `/help` | Show this help message |
 
 ## Getting Started
