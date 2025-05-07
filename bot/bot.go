@@ -172,7 +172,7 @@ func (b *Bot) handleJoin(ctx *th.Context, message t.Message) error {
 	groupName := args[1]
 	slog.Debug("bot: Joining group", "group_name", groupName, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, &message, func(group *storage.MentionGroup, originalMessage *t.Message) error {
-		return b.joinGroup(group, message.From, message.Chat.ID, originalMessage)
+		return b.joinGroupOperation(group, message.From, message.Chat.ID, originalMessage)
 	})
 	return err
 }
@@ -212,7 +212,7 @@ func (b *Bot) handleLeave(ctx *th.Context, message t.Message) error {
 	groupName := args[1]
 	slog.Debug("bot: Leaving group", "group_name", groupName, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, &message, func(group *storage.MentionGroup, originalMessage *t.Message) error {
-		return b.leaveGroup(group, message.From.ID, message.Chat.ID, originalMessage)
+		return b.leaveGroupOperation(group, message.From.ID, message.Chat.ID, originalMessage)
 	})
 	return err
 }
@@ -303,7 +303,7 @@ func (b *Bot) handleDeleteGroup(ctx *th.Context, message t.Message) error {
 	groupName := args[1]
 	slog.Debug("bot: Deleting group", "group_name", groupName, "chat_id", message.Chat.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, &message, func(group *storage.MentionGroup, originalMessage *t.Message) error {
-		return b.deleteGroup(group, message.Chat.ID, originalMessage)
+		return b.deleteGroupOperation(group, message.Chat.ID, originalMessage)
 	})
 	return err
 }
@@ -343,7 +343,7 @@ func (b *Bot) handleShowGroup(ctx *th.Context, message t.Message) error {
 	groupName := args[1]
 	slog.Debug("bot: Showing group", "group_name", groupName, "chat_id", message.Chat.ID)
 	err := b.executeOnGroup(message.Chat.ID, groupName, &message, func(group *storage.MentionGroup, originalMessage *t.Message) error {
-		return b.showGroupMembers(group, message.Chat.ID, originalMessage)
+		return b.showGroupMembersOperation(group, message.Chat.ID, originalMessage)
 	})
 	return err
 }

@@ -10,7 +10,7 @@ import (
 	t "github.com/mymmrac/telego"
 )
 
-func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64, originalMessage *t.Message) error {
+func (b *Bot) joinGroupOperation(group *storage.MentionGroup, user *t.User, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Joining group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
 	// Check if user is already a member using storage method
@@ -40,7 +40,7 @@ func (b *Bot) joinGroup(group *storage.MentionGroup, user *t.User, chatID int64,
 	return nil
 }
 
-func (b *Bot) leaveGroup(group *storage.MentionGroup, userID int64, chatID int64, originalMessage *t.Message) error {
+func (b *Bot) leaveGroupOperation(group *storage.MentionGroup, userID int64, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Leaving group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
 	isMember, err := b.storage.IsMember(group.ID, userID)
@@ -94,7 +94,7 @@ func (b *Bot) mentionGroups(groups []storage.MentionGroup, chatID int64, origina
 	return nil
 }
 
-func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
+func (b *Bot) deleteGroupOperation(group *storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Deleting group", "group_name", group.Name, "chat_id", chatID)
 
 	if len(group.Members) > 0 {
@@ -115,7 +115,7 @@ func (b *Bot) deleteGroup(group *storage.MentionGroup, chatID int64, originalMes
 	return nil
 }
 
-func (b *Bot) showGroupMembers(group *storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
+func (b *Bot) showGroupMembersOperation(group *storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Showing group members", "group_name", group.Name, "chat_id", chatID)
 
 	if len(group.Members) == 0 {
