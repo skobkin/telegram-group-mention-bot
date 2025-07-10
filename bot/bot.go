@@ -132,8 +132,7 @@ func (b *Bot) handleNewGroup(ctx *th.Context, message t.Message) error {
 	}
 
 	slog.Info("bot: Group created", "group_name", groupName, "chat_id", message.Chat.ID)
-	b.sendMessage(message.Chat.ID, fmt.Sprintf("Group '%s' created successfully\\!\nTo join this group, use: /join %s",
-		escapeMarkdownV2(groupName), escapeMarkdownV2(groupName)), &message)
+	b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group '%s' created successfully!\nTo join this group, use: /join %s", groupName, groupName)), &message)
 	return nil
 }
 

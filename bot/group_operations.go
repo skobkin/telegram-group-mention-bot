@@ -131,9 +131,9 @@ func (b *Bot) showGroupMembersOperation(group *storage.MentionGroup, chatID int6
 	}
 
 	memberList := b.formatMemberList(group.Members)
-	header := fmt.Sprintf("Members of group '%s':\n", escapeMarkdownV2(group.Name))
+	header := fmt.Sprintf("Members of group '%s':\n", group.Name)
 	messageText := header + strings.Join(memberList, "\n")
 	slog.Debug("bot: Sending member list", "chat_id", chatID, "member_count", len(memberList))
-	b.sendMessage(chatID, messageText, originalMessage, &t.ReplyKeyboardRemove{RemoveKeyboard: true})
+	b.sendMessage(chatID, escapeMarkdownV2(messageText), originalMessage, &t.ReplyKeyboardRemove{RemoveKeyboard: true})
 	return nil
 }
