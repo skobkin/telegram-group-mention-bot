@@ -437,14 +437,15 @@ func (b *Bot) handleFreeFormMessage(ctx *th.Context, message t.Message) error {
 	}
 
 	var groupNames []string
-	// Split the message into words separated by spaces or commas
-	words := strings.FieldsFunc(message.Text, func(r rune) bool {
-		return r == ' ' || r == ','
-	})
+
+	const punct = ".,!?;:)]}'\"…—/([{"
+
+	words := strings.Fields(message.Text)
 	for _, word := range words {
-		if strings.HasPrefix(word, "@") {
-			// Remove @ and any trailing punctuation (period or comma)
-			name := strings.TrimRight(strings.TrimPrefix(word, "@"), ".,")
+		trimmed := strings.TrimLeft(word, punct)
+		trimmed = strings.TrimRight(trimmed, punct)
+		if strings.HasPrefix(trimmed, "@") {
+			name := strings.TrimPrefix(trimmed, "@")
 			if isValidGroupName(name) {
 				groupNames = append(groupNames, name)
 			}
