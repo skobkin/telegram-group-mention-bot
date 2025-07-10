@@ -97,6 +97,7 @@ func (b *Bot) Start() error {
 	))
 	h.HandleMessage(b.handleDeleteGroup, th.CommandEqual("del"))
 	h.HandleMessage(b.handleShowGroup, th.CommandEqual("show"))
+	h.HandleMessage(b.handleClearEmptyGroups, th.CommandEqual("clear"))
 
 	h.HandleMessage(b.handleFreeFormMessage, th.Not(th.AnyCommand()))
 
@@ -359,6 +360,7 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 /del <name> - Delete a group (only if it has no members)
 /list - Show all groups in this chat
 /my - Show groups you've joined in this chat
+/clear - Delete all empty groups in this chat
 /help - Show this help message`)
 
 	b.sendMessage(message.Chat.ID, helpText, &message)
@@ -424,6 +426,47 @@ func (b *Bot) handleMy(ctx *th.Context, message t.Message) error {
 
 	listText := header + strings.Join(groupNames, "")
 	b.sendMessage(message.Chat.ID, listText, &message)
+	return nil
+}
+
+func (b *Bot) handleClearEmptyGroups(ctx *th.Context, message t.Message) error {
+	slog.Debug("bot: Handling clear command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+
+	b.sendTyping(tu.ID(message.Chat.ID))
+
+	groups, err := b.storage.GetGroupsByChat(message.Chat.ID)
+	if err != nil {
+		slog.Error("bot: Failed to get groups for clear", "error", err, "chat_id", message.Chat.ID)
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)), &message)
+		return nil
+	}
+
+	var removedGroups []string
+	for _, group := range groups {
+		members, err := b.storage.GetGroupMembers(group.ID)
+		if err != nil {
+			slog.Error("bot: Failed to get group members for clear", "error", err, "group_id", group.ID)
+			continue
+		}
+		if len(members) == 0 && group.Name != groupNameAll {
+			err := b.storage.DeleteGroup(group.ID)
+			if err != nil {
+				slog.Error("bot: Failed to delete empty group during clear", "error", err, "group_id", group.ID)
+				continue
+			}
+			removedGroups = append(removedGroups, group.Name)
+		}
+	}
+
+	if len(removedGroups) == 0 {
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2("No empty groups to delete."), &message)
+	} else {
+		msg := "Removed empty groups:\n"
+		for _, name := range removedGroups {
+			msg += fmt.Sprintf("• %s\n", name)
+		}
+		b.sendMessage(message.Chat.ID, escapeMarkdownV2(msg), &message)
+	}
 	return nil
 }
 
