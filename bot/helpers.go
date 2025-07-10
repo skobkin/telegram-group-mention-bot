@@ -42,14 +42,14 @@ func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
 	var memberList []string
 	for _, member := range members {
 		if member.User.Username != "" {
-			memberList = append(memberList, escapeMarkdownV2(fmt.Sprintf("%s %s (%s)",
+			memberList = append(memberList, fmt.Sprintf("%s %s (%s)",
 				member.User.FirstName,
 				member.User.LastName,
-				member.User.Username)))
+				member.User.Username))
 		} else {
-			memberList = append(memberList, escapeMarkdownV2(fmt.Sprintf("%s %s",
+			memberList = append(memberList, fmt.Sprintf("%s %s",
 				member.User.FirstName,
-				member.User.LastName)))
+				member.User.LastName))
 		}
 	}
 
