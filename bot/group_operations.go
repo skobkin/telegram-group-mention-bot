@@ -71,26 +71,32 @@ func (b *Bot) leaveGroupOperation(group *storage.MentionGroup, userID int64, cha
 func (b *Bot) mentionGroups(groups []storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Mentioning groups", "chat_id", chatID, "group_count", len(groups))
 
-	var allMentions []string
+	var groupNames []string
+	var groupLines []string
 	for _, group := range groups {
 		if len(group.Members) == 0 {
 			slog.Debug("bot: Group has no members", "group_name", group.Name, "chat_id", chatID)
 			continue
 		}
-
+		groupNames = append(groupNames, group.Name)
 		mentions := b.formatMentions(group.Members)
-		allMentions = append(allMentions, mentions...)
+		if len(mentions) == 0 {
+			continue
+		}
+		groupLine := fmt.Sprintf("%s: %s", escapeMarkdownV2(group.Name), strings.Join(mentions, ", "))
+		groupLines = append(groupLines, groupLine)
 	}
 
-	if len(allMentions) == 0 {
+	if len(groupLines) == 0 {
 		slog.Debug("bot: No members to mention", "chat_id", chatID)
 		b.sendMessage(chatID, escapeMarkdownV2("No members to mention."), originalMessage)
 		return nil
 	}
 
-	mentionText := strings.Join(allMentions, " ")
-	slog.Debug("bot: Sending mentions", "chat_id", chatID, "mention_count", len(allMentions))
-	b.sendMessage(chatID, mentionText, originalMessage)
+	header := fmt.Sprintf("⚠️ %s ⚠️", escapeMarkdownV2(strings.Join(groupNames, ", ")))
+	finalText := header + "\n\n" + strings.Join(groupLines, "\n")
+	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText))
+	b.sendMessage(chatID, finalText, originalMessage)
 	return nil
 }
 
