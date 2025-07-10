@@ -17,13 +17,19 @@ import (
 func (b *Bot) executeOnGroup(chatID int64, groupName string, originalMessage *t.Message, operation func(*storage.MentionGroup, *t.Message) error) error {
 	slog.Debug("bot:helpers: Requested operation execution on group", "chat_id", chatID, "group_name", groupName)
 
-	group, err := b.storage.GetGroup(groupName, chatID)
+	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(chatID, []string{groupName})
 	if err != nil {
 		slog.Error("bot:helpers: Failed to get group", "error", err,
 			"group_name", groupName, "chat_id", chatID)
 		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
 		return err
 	}
+	if len(groups) == 0 {
+		slog.Debug("bot:helpers: Group not found", "group_name", groupName, "chat_id", chatID)
+		b.sendMessage(chatID, escapeMarkdownV2("Group not found."), originalMessage)
+		return storage.ErrNotFound
+	}
+	group := &groups[0]
 
 	slog.Debug("bot:helpers: Group found, executing operation", "group_id", group.ID, "group_name", group.Name)
 	return operation(group, originalMessage)
