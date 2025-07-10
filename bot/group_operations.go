@@ -36,7 +36,7 @@ func (b *Bot) joinGroupOperation(group *storage.MentionGroup, user *t.User, chat
 	}
 
 	slog.Info("bot: User joined group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
-	b.sendMessage(chatID, fmt.Sprintf("You have joined group '%s'!", escapeMarkdownV2(group.Name)), originalMessage)
+	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("You have joined group '%s'!", group.Name)), originalMessage)
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (b *Bot) leaveGroupOperation(group *storage.MentionGroup, userID int64, cha
 	}
 
 	slog.Info("bot: User left group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
-	b.sendMessage(chatID, fmt.Sprintf("You have left group '%s'!", escapeMarkdownV2(group.Name)), originalMessage)
+	b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("You have left group '%s'!", group.Name)), originalMessage)
 	return nil
 }
 
