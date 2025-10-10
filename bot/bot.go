@@ -20,6 +20,7 @@ const (
 type Bot struct {
 	bot     *t.Bot
 	storage *storage.Storage
+	me      *botInfo
 }
 
 func New(token string, storage *storage.Storage) (*Bot, error) {
@@ -46,15 +47,16 @@ func (b *Bot) Start() error {
 		slog.Error("bot: Failed to get bot information", "error", err)
 		return fmt.Errorf("failed to get bot information: %w", err)
 	}
+	b.me = botInfoFromMe(me)
 	slog.Info("bot: Bot started",
-		"id", me.ID,
-		"username", me.Username,
-		"first_name", me.FirstName,
-		"last_name", me.LastName,
-		"is_bot", me.IsBot,
-		"can_join_groups", me.CanJoinGroups,
-		"can_read_all_group_messages", me.CanReadAllGroupMessages,
-		"supports_inline_queries", me.SupportsInlineQueries,
+		"id", b.me.ID,
+		"username", b.me.Username,
+		"first_name", b.me.FirstName,
+		"last_name", b.me.LastName,
+		"is_bot", b.me.IsBot,
+		"can_join_groups", b.me.CanJoinGroups,
+		"can_read_all_group_messages", b.me.CanReadAllGroupMessages,
+		"supports_inline_queries", b.me.SupportsInlineQueries,
 	)
 
 	// Get updates channel
@@ -84,20 +86,21 @@ func (b *Bot) Start() error {
 
 	// Register command handlers
 	slog.Debug("bot: Registering command handlers")
-	h.HandleMessage(b.handleHelp, th.CommandEqual("help"))
-	h.HandleMessage(b.handleList, th.CommandEqual("list"))
-	h.HandleMessage(b.handleMy, th.CommandEqual("my"))
-	h.HandleMessage(b.handleNewGroup, th.CommandEqual("new"))
-	h.HandleMessage(b.handleJoin, th.CommandEqual("join"))
-	h.HandleMessage(b.handleLeave, th.CommandEqual("leave"))
+	commandForMe := b.commandForThisBot()
+	h.HandleMessage(b.handleHelp, th.And(commandForMe, th.CommandEqual("help")))
+	h.HandleMessage(b.handleList, th.And(commandForMe, th.CommandEqual("list")))
+	h.HandleMessage(b.handleMy, th.And(commandForMe, th.CommandEqual("my")))
+	h.HandleMessage(b.handleNewGroup, th.And(commandForMe, th.CommandEqual("new")))
+	h.HandleMessage(b.handleJoin, th.And(commandForMe, th.CommandEqual("join")))
+	h.HandleMessage(b.handleLeave, th.And(commandForMe, th.CommandEqual("leave")))
 	h.HandleMessage(b.handleMention, th.Or(
-		th.CommandEqual("mention"),
-		th.CommandEqual("m"),
-		th.CommandEqual("call"),
+		th.And(commandForMe, th.CommandEqual("mention")),
+		th.And(commandForMe, th.CommandEqual("m")),
+		th.And(commandForMe, th.CommandEqual("call")),
 	))
-	h.HandleMessage(b.handleDeleteGroup, th.CommandEqual("del"))
-	h.HandleMessage(b.handleShowGroup, th.CommandEqual("show"))
-	h.HandleMessage(b.handleClearEmptyGroups, th.CommandEqual("clear"))
+	h.HandleMessage(b.handleDeleteGroup, th.And(commandForMe, th.CommandEqual("del")))
+	h.HandleMessage(b.handleShowGroup, th.And(commandForMe, th.CommandEqual("show")))
+	h.HandleMessage(b.handleClearEmptyGroups, th.And(commandForMe, th.CommandEqual("clear")))
 
 	h.HandleMessage(b.handleFreeFormMessage, th.Not(th.AnyCommand()))
 
