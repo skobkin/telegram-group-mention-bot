@@ -352,16 +352,23 @@ func (b *Bot) handleHelp(ctx *th.Context, message t.Message) error {
 	slog.Debug("bot: Handling help command", "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
 
 	helpText := escapeMarkdownV2(`Available commands:
-/new <name> - Create a new mention group
-/join <name> - Join an existing mention group
-/leave <name> - Leave a mention group
-/mention <name> or /m <name> or /call <name> - Mention all members of a group
-/show <name> - Show all members of a group without mentioning them
-/del <name> - Delete a group (only if it has no members)
+/new <name> - Create a mention group (lowercase letters, numbers, dashes)
+/join [<name>] - Join a group or pick one from the keyboard
+/leave [<name>] - Leave a group you are in
+/mention <name> or /m <name> or /call <name> - Mention everyone in a group
+/show <name> - List members without pinging them
+/del <name> - Delete a group (only when it is empty)
 /list - Show all groups in this chat
-/my - Show groups you've joined in this chat
+/my - Show groups you have joined in this chat
 /clear - Delete all empty groups in this chat
-/help - Show this help message`)
+/help - Show this help message
+
+Parameters in [brackets] are optional.
+
+Tips:
+- Use /join or /leave without a name to get a keyboard with available groups
+- Mention groups inline by typing @group or several like @devs,@qa in a message
+- A group named all will automatically include everyone who speaks in the chat`)
 
 	b.sendMessage(message.Chat.ID, helpText, &message)
 	return nil
