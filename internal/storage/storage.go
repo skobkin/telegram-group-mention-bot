@@ -36,7 +36,8 @@ var (
 )
 
 type Storage struct {
-	db *gorm.DB
+	db   *gorm.DB
+	path string
 }
 
 // Close releases the underlying database connection pool.
@@ -74,7 +75,7 @@ func New(dbPath string) (*Storage, error) {
 		return nil, errors.Join(ErrMigrate, err)
 	}
 
-	return &Storage{db: db}, nil
+	return &Storage{db: db, path: dbPath}, nil
 }
 
 // dsn adds the pragmas every connection needs: enforced foreign keys (so

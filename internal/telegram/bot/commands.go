@@ -22,6 +22,8 @@ type command struct {
 	usage   string   // as shown in /help, e.g. "/join [<name>]"
 	help    string   // one-line description
 	handler commandHandler
+	menu    []string // names shown in the Telegram command menu; defaults to the first name
+	hidden  bool     // left out of /help and the command menu
 }
 
 // groupSource selects which groups the picker offers when a command is used without a name.
@@ -74,21 +76,28 @@ func (b *Bot) commands() []command {
 		},
 	})
 
-	return []command{
-		{[]string{"new"}, "/new <name>", "Create a mention group (lowercase letters, numbers, dashes)", b.handleNewGroup},
-		{[]string{"join"}, "/join [<name>]", "Join a group or pick one from the keyboard", join},
-		{[]string{"leave"}, "/leave [<name>]", "Leave a group you are in", leave},
-		{[]string{"mention", "m", "call"}, "/mention <name> or /m <name> or /call <name>", "Mention everyone in a group", mention},
-		{[]string{"show"}, "/show <name>", "List members without pinging them", show},
-		{[]string{"del"}, "/del <name>", "Delete a group (only when it is empty)", del},
-		{[]string{"list"}, "/list", "Show all groups in this chat", b.handleList},
-		{[]string{"my"}, "/my", "Show groups you have joined in this chat", b.handleMy},
-		{[]string{"clear"}, "/clear", "Delete all empty groups in this chat", b.handleClearEmptyGroups},
-		{[]string{"rename"}, "/rename <old> <new>", "Rename a group (members are kept)", b.handleRename},
-		{[]string{"alias"}, "/alias <group> <alias>", "Add a short alias for a group", b.handleAlias},
-		{[]string{"unalias"}, "/unalias <alias>", "Remove an alias", b.handleUnalias},
-		{[]string{"help"}, "/help", "Show this help message", b.handleHelp},
+	cmds := []command{
+		{names: []string{"new"}, usage: "/new <name>", help: "Create a mention group (lowercase letters, numbers, dashes)", handler: b.handleNewGroup},
+		{names: []string{"join"}, usage: "/join [<name>]", help: "Join a group or pick one from the keyboard", handler: join},
+		{names: []string{"leave"}, usage: "/leave [<name>]", help: "Leave a group you are in", handler: leave},
+		{names: []string{"mention", "m", "call"}, usage: "/mention <name> or /m <name> or /call <name>", help: "Mention everyone in a group", handler: mention, menu: []string{"mention", "call"}},
+		{names: []string{"show"}, usage: "/show <name>", help: "List members without pinging them", handler: show},
+		{names: []string{"del"}, usage: "/del <name>", help: "Delete a group (only when it is empty)", handler: del},
+		{names: []string{"list"}, usage: "/list", help: "Show all groups in this chat", handler: b.handleList},
+		{names: []string{"my"}, usage: "/my", help: "Show groups you have joined in this chat", handler: b.handleMy},
+		{names: []string{"clear"}, usage: "/clear", help: "Delete all empty groups in this chat", handler: b.handleClearEmptyGroups},
+		{names: []string{"rename"}, usage: "/rename <old> <new>", help: "Rename a group (members are kept)", handler: b.handleRename},
+		{names: []string{"alias"}, usage: "/alias <group> <alias>", help: "Add a short alias for a group", handler: b.handleAlias},
+		{names: []string{"unalias"}, usage: "/unalias <alias>", help: "Remove an alias", handler: b.handleUnalias},
+		{names: []string{"help"}, usage: "/help", help: "Show this help message", handler: b.handleHelp},
 	}
+
+	if len(b.owners) > 0 {
+		// Hidden: not in /help and not in the command menu
+		cmds = append(cmds, command{names: []string{"stats"}, usage: "/stats", help: "Usage statistics (bot owners, private chat)", handler: b.handleStats, hidden: true})
+	}
+
+	return cmds
 }
 
 // helpText renders /help from the command table.
@@ -98,6 +107,10 @@ func helpText(commands []command) string {
 	sb.WriteString("Available commands:\n")
 
 	for _, cmd := range commands {
+		if cmd.hidden {
+			continue
+		}
+
 		sb.WriteString(cmd.usage + " - " + cmd.help + "\n")
 	}
 

@@ -23,9 +23,18 @@ type Bot struct {
 	api     API    // used by handlers to send; replaceable in tests
 	storage Store
 	me      *botInfo
+
+	owners    map[int64]struct{} // users allowed to use owner tools; empty disables them
+	startedAt time.Time
 }
 
-func New(token string, store Store) (*Bot, error) {
+// Options are the optional settings of a Bot.
+type Options struct {
+	// OwnerIDs enables owner-only tools (/stats) for these Telegram user IDs.
+	OwnerIDs []int64
+}
+
+func New(token string, store Store, opts Options) (*Bot, error) {
 	slog.Debug("bot: Creating new bot instance", "token_length", len(token))
 
 	// Create bot with debug logging
@@ -38,10 +47,17 @@ func New(token string, store Store) (*Bot, error) {
 
 	slog.Debug("bot: Bot instance created successfully")
 
+	owners := make(map[int64]struct{}, len(opts.OwnerIDs))
+	for _, id := range opts.OwnerIDs {
+		owners[id] = struct{}{}
+	}
+
 	return &Bot{
-		bot:     bot,
-		api:     bot,
-		storage: store,
+		bot:       bot,
+		api:       bot,
+		storage:   store,
+		owners:    owners,
+		startedAt: time.Now(),
 	}, nil
 }
 

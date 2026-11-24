@@ -32,5 +32,6 @@ type Store interface {
 	AddAlias(ctx context.Context, chatID int64, groupName, alias string) error
 	RemoveAlias(ctx context.Context, chatID int64, alias string) (bool, error)
 	GetAliasesByChat(ctx context.Context, chatID int64) (map[uint][]string, error)
+	Stats(ctx context.Context) (storage.Stats, error)
 	MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error
 }

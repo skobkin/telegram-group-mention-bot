@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 )
 
@@ -19,6 +20,8 @@ type Config struct {
 	TelegramToken string
 	// DatabasePath is the SQLite database file path.
 	DatabasePath string
+	// OwnerIDs are the Telegram user IDs allowed to use owner tools (/stats). Empty disables them.
+	OwnerIDs []int64
 }
 
 // Load builds the configuration using getenv (typically os.Getenv).
@@ -36,7 +39,35 @@ func Load(getenv func(string) string) (Config, error) {
 		cfg.DatabasePath = defaultDatabasePath
 	}
 
+	owners, err := parseIDList("BOT_OWNER_IDS", getenv("BOT_OWNER_IDS"))
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg.OwnerIDs = owners
+
 	return cfg, nil
+}
+
+// parseIDList parses a comma-separated list of Telegram user IDs; empty input gives no IDs.
+func parseIDList(name, raw string) ([]int64, error) {
+	var ids []int64
+
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("invalid %s: %q is not a positive user ID", name, part)
+		}
+
+		ids = append(ids, id)
+	}
+
+	return ids, nil
 }
 
 // ParseLogLevel converts debug/info/warn/error (case-insensitive) to a slog level.

@@ -555,3 +555,31 @@ func TestCaseInsensitiveMigrationMergesCollisions(t *testing.T) {
 		t.Fatalf("other chats are migrated independently: %v", err)
 	}
 }
+
+func TestStats(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	for _, u := range []int64{1, 2, 3} {
+		if _, err := s.CreateOrUpdateUser(ctx, u, "u", "U", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_ = s.CreateGroup(ctx, "a", 10)
+	_ = s.CreateGroup(ctx, "b", 10)
+	_ = s.CreateGroup(ctx, "a", 20)
+
+	group, _ := s.GetGroup(ctx, "a", 10)
+	_, _ = s.AddMember(ctx, group.ID, &User{ID: 1})
+	_, _ = s.AddMember(ctx, group.ID, &User{ID: 2})
+
+	stats, err := s.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stats.Chats != 2 || stats.Groups != 3 || stats.Users != 3 || stats.Memberships != 2 || stats.DBSizeBytes == 0 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
+}

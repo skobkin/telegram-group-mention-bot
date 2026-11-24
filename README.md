@@ -63,6 +63,7 @@ docker run -d \
 |----------|-------------|---------|
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from [@BotFather](https://t.me/botfather) | (required) |
 | `DATABASE_PATH` | Path to the SQLite database file | `data.sqlite` |
+| `BOT_OWNER_IDS` | Comma-separated Telegram user IDs allowed to use `/stats` (private chat only); empty disables owner tools | empty |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `warn` |
 
 You can also control logging verbosity using command-line flags:

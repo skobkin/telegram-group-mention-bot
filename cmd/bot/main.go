@@ -57,7 +57,7 @@ func run() int {
 		return 1
 	}
 
-	b, err := bot.New(cfg.TelegramToken, store)
+	b, err := bot.New(cfg.TelegramToken, store, bot.Options{OwnerIDs: cfg.OwnerIDs})
 	if err != nil {
 		slog.Error("main: Failed to initialize bot", "error", err)
 

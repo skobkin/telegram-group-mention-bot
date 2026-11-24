@@ -4,6 +4,8 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- New optional `BOT_OWNER_IDS` (comma-separated Telegram user IDs). Owners get a hidden `/stats` command in a private chat with the bot
+  (version, uptime, chats, groups, users, memberships, database size). Empty (default) disables it.
 - `.env` and the compiled binary are no longer tracked in git. Copy `.env.example` to `.env` locally.
   If you ever used a real token from the previously committed `.env`, rotate it via @BotFather.
 - Project layout changed: build with `go build ./cmd/bot` (was `go build .`).
