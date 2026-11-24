@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"telegram-group-mention-bot/internal/storage/migrations"
 )
 
 var (
@@ -24,29 +27,12 @@ var (
 	ErrUpdate   = errors.New("failed to update")
 
 	// Migration errors
-	ErrDropColumn      = errors.New("failed to drop column")
-	ErrAutoMigrate     = errors.New("failed to auto migrate schema")
-	ErrMigrateUserData = errors.New("failed to migrate user data")
-	ErrConnectDB       = errors.New("failed to connect to database")
+	ErrMigrate   = errors.New("failed to migrate database")
+	ErrConnectDB = errors.New("failed to connect to database")
 )
 
 type Storage struct {
 	db *gorm.DB
-}
-
-func New(dbPath string) (*Storage, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
-	if err != nil {
-		slog.Error("storage: Failed to connect to database", "error", err, "path", dbPath)
-		return nil, errors.Join(ErrConnectDB, err)
-	}
-
-	s := &Storage{db: db}
-	if err := s.migrate(); err != nil {
-		return nil, err
-	}
-
-	return s, nil
 }
 
 // Close releases the underlying database connection pool.
@@ -59,86 +45,39 @@ func (s *Storage) Close() error {
 	return sqlDB.Close()
 }
 
-func (s *Storage) migrate() error {
-	for _, col := range []string{"created_at", "updated_at", "deleted_at"} {
-		if s.db.Migrator().HasColumn(&MentionGroup{}, col) {
-			err := s.db.Migrator().DropColumn(&MentionGroup{}, col)
-			if err != nil {
-				slog.Error("storage: Failed to drop column from MentionGroup", "error", err, "column", col)
-				return errors.Join(ErrDropColumn, err)
-			}
-		}
-
-		if s.db.Migrator().HasColumn(&GroupMember{}, col) {
-			err := s.db.Migrator().DropColumn(&GroupMember{}, col)
-			if err != nil {
-				slog.Error("storage: Failed to drop column from GroupMember", "error", err, "column", col)
-				return errors.Join(ErrDropColumn, err)
-			}
-		}
-	}
-
-	// Auto migrate the schema
-	err := s.db.AutoMigrate(&User{}, &MentionGroup{}, &GroupMember{})
+// New opens (and migrates) the SQLite database at dbPath.
+func New(dbPath string) (*Storage, error) {
+	db, err := gorm.Open(sqlite.Open(dsn(dbPath)), &gorm.Config{})
 	if err != nil {
+		slog.Error("storage: Failed to connect to database", "error", err, "path", dbPath)
+		return nil, errors.Join(ErrConnectDB, err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, errors.Join(ErrConnectDB, err)
+	}
+
+	if err := migrations.Apply(context.Background(), sqlDB); err != nil {
+		_ = sqlDB.Close()
 		slog.Error("storage: Failed to migrate database", "error", err)
-		return errors.Join(ErrAutoMigrate, err)
+
+		return nil, errors.Join(ErrMigrate, err)
 	}
 
-	if err := s.migrateUserData(); err != nil {
-		return errors.Join(ErrMigrateUserData, err)
-	}
-
-	return nil
+	return &Storage{db: db}, nil
 }
 
-// TODO: This function can be removed in a future release after all users have migrated to the new schema.
-func (s *Storage) migrateUserData() error {
-	// Check if old columns still exist
-	if !s.db.Migrator().HasColumn(&GroupMember{}, "username") {
-		return nil // Migration already completed
+// dsn adds the pragmas every connection needs: enforced foreign keys (so
+// ON DELETE CASCADE works), WAL journaling and a busy timeout to avoid
+// "database is locked" under concurrent handlers.
+func dsn(path string) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
 	}
 
-	// Get all existing group members with their user info
-	var oldMembers []struct {
-		ID        uint
-		GroupID   uint
-		UserID    int64
-		Username  string
-		FirstName string
-		LastName  string
-	}
-	if err := s.db.Raw("SELECT id, group_id, user_id, username, first_name, last_name FROM group_members").Scan(&oldMembers).Error; err != nil {
-		return errors.Join(ErrMigrateUserData, err)
-	}
-
-	for _, member := range oldMembers {
-		user := User{
-			ID:        member.UserID,
-			Username:  member.Username,
-			FirstName: member.FirstName,
-			LastName:  member.LastName,
-		}
-		if err := s.db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			UpdateAll: true,
-		}).Create(&user).Error; err != nil {
-			return errors.Join(ErrMigrateUserData, err)
-		}
-	}
-
-	// Remove unused columns from GroupMember after data migration
-	for _, col := range []string{"username", "first_name", "last_name"} {
-		if s.db.Migrator().HasColumn(&GroupMember{}, col) {
-			err := s.db.Migrator().DropColumn(&GroupMember{}, col)
-			if err != nil {
-				slog.Error("storage: Failed to drop column from GroupMember", "error", err, "column", col)
-				return errors.Join(ErrDropColumn, err)
-			}
-		}
-	}
-
-	return nil
+	return path + sep + "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 }
 
 // CreateGroup creates a new mention group in a chat
@@ -210,9 +149,11 @@ func (s *Storage) CreateOrUpdateUser(ctx context.Context, userID int64, username
 	return &user, nil
 }
 
-func (s *Storage) AddMember(ctx context.Context, groupID uint, user *User) error {
+// AddMember adds a user to a group. It is idempotent: it reports whether a
+// new membership row was created (false if the user was already a member).
+func (s *Storage) AddMember(ctx context.Context, groupID uint, user *User) (bool, error) {
 	if user == nil {
-		return ErrNilUser
+		return false, ErrNilUser
 	}
 
 	member := GroupMember{
@@ -220,23 +161,26 @@ func (s *Storage) AddMember(ctx context.Context, groupID uint, user *User) error
 		UserID:  user.ID,
 	}
 
-	result := s.db.WithContext(ctx).Create(&member)
+	result := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&member)
 	if result.Error != nil {
 		slog.Error("storage: Failed to add member", "error", result.Error, "group_id", groupID, "user_id", user.ID)
-		return errors.Join(ErrCreate, result.Error)
+		return false, errors.Join(ErrCreate, result.Error)
 	}
-	return nil
+
+	return result.RowsAffected > 0, nil
 }
 
-// RemoveMember removes a user from a mention group
-func (s *Storage) RemoveMember(ctx context.Context, groupID uint, userID int64) error {
+// RemoveMember removes a user from a mention group and reports whether the
+// user was a member.
+func (s *Storage) RemoveMember(ctx context.Context, groupID uint, userID int64) (bool, error) {
 	result := s.db.WithContext(ctx).Where("group_id = ? AND user_id = ?", groupID, userID).Delete(&GroupMember{})
 	if result.Error != nil {
 		slog.Error("storage: Failed to remove member", "error", result.Error,
 			"group_id", groupID, "user_id", userID)
-		return errors.Join(ErrDelete, result.Error)
+		return false, errors.Join(ErrDelete, result.Error)
 	}
-	return nil
+
+	return result.RowsAffected > 0, nil
 }
 
 // GetGroupMembers retrieves all members of a group
@@ -258,6 +202,36 @@ func (s *Storage) DeleteGroup(ctx context.Context, groupID uint) error {
 		return errors.Join(ErrDelete, result.Error)
 	}
 	return nil
+}
+
+// DeleteEmptyGroups removes, in one transaction, every group of the chat that has no
+// members (except the one named keepName) and returns the removed names.
+func (s *Storage) DeleteEmptyGroups(ctx context.Context, chatID int64, keepName string) ([]string, error) {
+	var removed []string
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var groups []MentionGroup
+		if err := tx.Where("chat_id = ? AND name <> ? AND id NOT IN (SELECT group_id FROM group_members)", chatID, keepName).
+			Order("name").Find(&groups).Error; err != nil {
+			return err
+		}
+
+		for _, group := range groups {
+			if err := tx.Delete(&MentionGroup{}, group.ID).Error; err != nil {
+				return err
+			}
+
+			removed = append(removed, group.Name)
+		}
+
+		return nil
+	})
+	if err != nil {
+		slog.Error("storage: Failed to delete empty groups", "error", err, "chat_id", chatID)
+		return nil, errors.Join(ErrDelete, err)
+	}
+
+	return removed, nil
 }
 
 func (s *Storage) GetGroupsByChat(ctx context.Context, chatID int64) ([]MentionGroup, error) {

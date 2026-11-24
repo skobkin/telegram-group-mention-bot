@@ -200,7 +200,7 @@ func (b *Bot) AddMember(ctx context.Context, groupID uint, userID int64, usernam
 	}
 
 	// Then add them to the group
-	if err := b.storage.AddMember(ctx, groupID, user); err != nil {
+	if _, err := b.storage.AddMember(ctx, groupID, user); err != nil {
 		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID)
 		return fmt.Errorf("failed to add member: %w", err)
 	}

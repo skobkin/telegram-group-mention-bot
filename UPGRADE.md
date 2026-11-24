@@ -11,4 +11,8 @@ Operator-facing changes, newest first.
 - SQLite is now CGO-free (`modernc.org/sqlite`); existing database files keep working. No C toolchain is needed to build.
 - The Docker image now runs as a **non-root user (uid/gid 10001)**. Make an existing `/data` volume writable for it, e.g.
   `chown -R 10001:10001 ./data` on the host, otherwise the bot cannot open its database.
+- The database is now migrated by versioned migrations (`PRAGMA user_version`) instead of GORM AutoMigrate; existing
+  databases are upgraded automatically on first start (legacy columns removed, orphan member rows cleaned up).
+  The bot refuses to start on a database written by a newer version. Back up `data.sqlite` before upgrading.
+  SQLite now runs in WAL mode (extra `-wal`/`-shm` files next to the database) with foreign keys enforced.
 - Logs no longer contain message text or user names, and the bot token is scrubbed from all log output.

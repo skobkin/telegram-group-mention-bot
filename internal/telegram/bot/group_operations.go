@@ -14,25 +14,17 @@ import (
 func (b *Bot) joinGroupOperation(ctx context.Context, group *storage.MentionGroup, user *t.User, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Joining group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
-	// Check if user is already a member using storage method
-	isMember, err := b.storage.IsMember(ctx, group.ID, user.ID)
-	if err != nil {
-		slog.Error("bot: Failed to check membership", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to join group: %v", err)), originalMessage)
-		return nil
-	}
-
-	if isMember {
-		slog.Debug("bot: User is already a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are already a member of group '%s'.", group.Name)), originalMessage)
-		return nil
-	}
-
-	// Add user to group - user data is already synced by middleware
-	err = b.storage.AddMember(ctx, group.ID, &storage.User{ID: user.ID})
+	// Idempotent insert: user data is already synced by middleware
+	added, err := b.storage.AddMember(ctx, group.ID, &storage.User{ID: user.ID})
 	if err != nil {
 		slog.Error("bot: Failed to add user to group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to join group: %v", err)), originalMessage)
+		return nil
+	}
+
+	if !added {
+		slog.Debug("bot: User is already a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are already a member of group '%s'.", group.Name)), originalMessage)
 		return nil
 	}
 
@@ -44,23 +36,16 @@ func (b *Bot) joinGroupOperation(ctx context.Context, group *storage.MentionGrou
 func (b *Bot) leaveGroupOperation(ctx context.Context, group *storage.MentionGroup, userID int64, chatID int64, originalMessage *t.Message) error {
 	slog.Debug("bot: Leaving group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
-	isMember, err := b.storage.IsMember(ctx, group.ID, userID)
-	if err != nil {
-		slog.Error("bot: Failed to check membership", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to leave group: %v", err)), originalMessage)
-		return nil
-	}
-
-	if !isMember {
-		slog.Debug("bot: User is not a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are not a member of group '%s'.", group.Name)), originalMessage)
-		return nil
-	}
-
-	err = b.storage.RemoveMember(ctx, group.ID, userID)
+	removed, err := b.storage.RemoveMember(ctx, group.ID, userID)
 	if err != nil {
 		slog.Error("bot: Failed to remove user from group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to leave group: %v", err)), originalMessage)
+		return nil
+	}
+
+	if !removed {
+		slog.Debug("bot: User is not a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are not a member of group '%s'.", group.Name)), originalMessage)
 		return nil
 	}
 

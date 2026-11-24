@@ -491,28 +491,11 @@ func (b *Bot) handleClearEmptyGroups(ctx *th.Context, message t.Message) error {
 
 	b.sendTyping(ctx, tu.ID(message.Chat.ID))
 
-	groups, err := b.storage.GetGroupsByChat(ctx, message.Chat.ID)
+	removedGroups, err := b.storage.DeleteEmptyGroups(ctx, message.Chat.ID, groupNameAll)
 	if err != nil {
-		slog.Error("bot: Failed to get groups for clear", "error", err, "chat_id", message.Chat.ID)
-		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)), &message)
+		slog.Error("bot: Failed to clear empty groups", "error", err, "chat_id", message.Chat.ID)
+		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to delete empty groups: %v", err)), &message)
 		return nil
-	}
-
-	var removedGroups []string
-	for _, group := range groups {
-		members, err := b.storage.GetGroupMembers(ctx, group.ID)
-		if err != nil {
-			slog.Error("bot: Failed to get group members for clear", "error", err, "group_id", group.ID)
-			continue
-		}
-		if len(members) == 0 && group.Name != groupNameAll {
-			err := b.storage.DeleteGroup(ctx, group.ID)
-			if err != nil {
-				slog.Error("bot: Failed to delete empty group during clear", "error", err, "group_id", group.ID)
-				continue
-			}
-			removedGroups = append(removedGroups, group.Name)
-		}
 	}
 
 	if len(removedGroups) == 0 {

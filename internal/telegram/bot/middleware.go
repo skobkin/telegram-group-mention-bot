@@ -124,30 +124,11 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 		return ctx.Next(update)
 	}
 
-	// Check if user is already a member of the "all" group
-	isMember, err := b.storage.IsMember(ctx, allGroup.ID, from.ID)
-	if err != nil {
-		slog.Error("bot:middleware: Failed to check membership in 'all' group", "error", err, "group_id", allGroup.ID, "user_id", from.ID)
-		return ctx.Next(update)
-	}
-
-	if isMember {
-		slog.Debug("bot:middleware: User already a member of 'all' group", "group_id", allGroup.ID, "user_id", from.ID)
-		return ctx.Next(update)
-	}
-
-	slog.Debug("bot:middleware: Adding user to 'all' group", "group_id", allGroup.ID, "user_id", from.ID)
-
-	// Create a minimal User object with just the ID field
-	newMinimalMember := &storage.User{
-		ID: from.ID,
-	}
-
-	// Add user to the "all" group
-	err = b.storage.AddMember(ctx, allGroup.ID, newMinimalMember)
+	// Idempotent insert; the user row was created by syncUserData
+	added, err := b.storage.AddMember(ctx, allGroup.ID, &storage.User{ID: from.ID})
 	if err != nil {
 		slog.Error("bot:middleware: Failed to add user to 'all' group", "error", err, "group_id", allGroup.ID, "user_id", from.ID)
-	} else {
+	} else if added {
 		slog.Info("bot:middleware: Added user to 'all' group", "group_id", allGroup.ID, "user_id", from.ID)
 	}
 
