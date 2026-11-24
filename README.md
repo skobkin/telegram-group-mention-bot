@@ -13,6 +13,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 - List group members without mentioning them
 - Delete empty groups
 - Case-insensitive group names, plus aliases and renaming
+- Inline button pickers when a command is used without a group name (only the requester can use them), and Join/Leave buttons under every mention post
 
 ## Commands
 

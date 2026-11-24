@@ -4,6 +4,8 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- Reply keyboards are gone: `/join`, `/leave`, `/m`, `/show`, `/del` without a name now show an inline keyboard that is edited in place,
+  and mention posts carry Join/Leave buttons. The bot now handles `callback_query` updates (no configuration needed).
 - New optional `BOT_OWNER_IDS` (comma-separated Telegram user IDs). Owners get a hidden `/stats` command in a private chat with the bot
   (version, uptime, chats, groups, users, memberships, database size). Empty (default) disables it.
 - `.env` and the compiled binary are no longer tracked in git. Copy `.env.example` to `.env` locally.

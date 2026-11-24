@@ -19,7 +19,7 @@ func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, chatID, []string{groupName})
 	if err != nil {
 		slog.Error("bot:helpers: Failed to get group", "error", err, "group_name", groupName, "chat_id", chatID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to look up the group."), originalMessage)
 
 		return err
 	}
@@ -84,41 +84,6 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	slog.Debug("bot:helpers: Mentions formatted", "mention_count", len(mentions))
 
 	return mentions
-}
-
-func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) *t.ReplyKeyboardMarkup {
-	slog.Debug("bot:helpers: Creating group selection keyboard", "command_prefix", commandPrefix, "group_count", len(groups))
-
-	if len(groups) == 0 {
-		slog.Debug("bot:helpers: No groups available for keyboard, returning nil")
-
-		return nil
-	}
-
-	// Create keyboard with 2 columns
-	keyboard := make([][]t.KeyboardButton, 0, (len(groups)+1)/2)
-	for i := 0; i < len(groups); i += 2 {
-		row := make([]t.KeyboardButton, 0, 2)
-		row = append(row, t.KeyboardButton{
-			Text: fmt.Sprintf("/%s %s", commandPrefix, groups[i].Name),
-		})
-		if i+1 < len(groups) {
-			row = append(row, t.KeyboardButton{
-				Text: fmt.Sprintf("/%s %s", commandPrefix, groups[i+1].Name),
-			})
-		}
-		keyboard = append(keyboard, row)
-	}
-
-	slog.Debug("bot:helpers: Group selection keyboard created", "row_count", len(keyboard))
-
-	return &t.ReplyKeyboardMarkup{
-		Keyboard:              keyboard,
-		ResizeKeyboard:        true,
-		OneTimeKeyboard:       true,
-		Selective:             true,
-		InputFieldPlaceholder: "Select group",
-	}
 }
 
 func escapeMarkdownV2(text string) string {

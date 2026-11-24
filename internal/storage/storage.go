@@ -140,6 +140,24 @@ func (s *Storage) GetGroup(ctx context.Context, name string, chatID int64) (*Men
 	return &group, nil
 }
 
+// GetGroupByID retrieves a group with its members by primary key.
+func (s *Storage) GetGroupByID(ctx context.Context, id uint) (*MentionGroup, error) {
+	var group MentionGroup
+
+	result := s.db.WithContext(ctx).Preload("Members.User").First(&group, id)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.Join(ErrNotFound, result.Error)
+		}
+
+		slog.Error("storage: Failed to get group by ID", "error", result.Error, "group_id", id)
+
+		return nil, errors.Join(ErrGet, result.Error)
+	}
+
+	return &group, nil
+}
+
 // GetUser retrieves a user by ID
 func (s *Storage) GetUser(ctx context.Context, userID int64) (*User, error) {
 	var user User

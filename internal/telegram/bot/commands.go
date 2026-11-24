@@ -37,44 +37,58 @@ const (
 
 // groupAction describes a command that works on one group chosen by name or from a picker.
 type groupAction struct {
-	keyboardCommand string // command text put on picker buttons, e.g. "join"
-	verb            string // used in "Select a group to <verb>." and "No groups available to <verb>."
-	source          groupSource
-	notFound        string // reply when the named group does not exist; %s is the name
-	run             func(ctx context.Context, group *storage.MentionGroup, message *t.Message) error
+	key      string // command name and callback action, e.g. "join"
+	verb     string // used in "Select a group to <verb>." and "No groups available to <verb>."
+	source   groupSource
+	notFound string // reply when the named group does not exist; %s is the name
+	// run performs the action for actor. origin (may be nil) is the message a post should reply to.
+	run func(ctx context.Context, group *storage.MentionGroup, actor *t.User, origin *t.Message) outcome
+}
+
+// groupActions returns the actions that take a group, keyed by name (also the callback action).
+func (b *Bot) groupActions() map[string]groupAction {
+	actions := []groupAction{
+		{key: "join", verb: "join", source: sourceJoinable,
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message) outcome {
+				return b.joinGroup(ctx, g, actor, g.ChatID)
+			}},
+		{key: "leave", verb: "leave", source: sourceMine,
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message) outcome {
+				return b.leaveGroup(ctx, g, actor.ID, g.ChatID)
+			}},
+		{key: "m", verb: "mention", source: sourceAll, notFound: "Group '%s' not found.",
+			run: func(ctx context.Context, g *storage.MentionGroup, _ *t.User, origin *t.Message) outcome {
+				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, origin); err != nil {
+					slog.Error("bot: Failed to mention group", "error", err, "chat_id", g.ChatID)
+				}
+
+				return outcome{silent: true}
+			}},
+		{key: "del", verb: "delete", source: sourceAll,
+			run: func(ctx context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message) outcome {
+				return b.deleteGroup(ctx, g, g.ChatID)
+			}},
+		{key: "show", verb: "show", source: sourceAll,
+			run: func(_ context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message) outcome {
+				return b.showGroupMembers(g)
+			}},
+	}
+
+	byKey := make(map[string]groupAction, len(actions))
+	for _, action := range actions {
+		byKey[action.key] = action
+	}
+
+	return byKey
 }
 
 func (b *Bot) commands() []command {
-	join := b.groupCommand(groupAction{
-		keyboardCommand: "join", verb: "join", source: sourceJoinable,
-		run: func(ctx context.Context, group *storage.MentionGroup, m *t.Message) error {
-			return b.joinGroupOperation(ctx, group, m.From, m.Chat.ID, m)
-		},
-	})
-	leave := b.groupCommand(groupAction{
-		keyboardCommand: "leave", verb: "leave", source: sourceMine,
-		run: func(ctx context.Context, group *storage.MentionGroup, m *t.Message) error {
-			return b.leaveGroupOperation(ctx, group, m.From.ID, m.Chat.ID, m)
-		},
-	})
-	mention := b.groupCommand(groupAction{
-		keyboardCommand: "m", verb: "mention", source: sourceAll, notFound: "Group '%s' not found.",
-		run: func(ctx context.Context, group *storage.MentionGroup, m *t.Message) error {
-			return b.mentionGroups(ctx, []storage.MentionGroup{*group}, m.Chat.ID, m)
-		},
-	})
-	del := b.groupCommand(groupAction{
-		keyboardCommand: "del", verb: "delete", source: sourceAll,
-		run: func(ctx context.Context, group *storage.MentionGroup, m *t.Message) error {
-			return b.deleteGroupOperation(ctx, group, m.Chat.ID, m)
-		},
-	})
-	show := b.groupCommand(groupAction{
-		keyboardCommand: "show", verb: "show", source: sourceAll,
-		run: func(ctx context.Context, group *storage.MentionGroup, m *t.Message) error {
-			return b.showGroupMembersOperation(ctx, group, m.Chat.ID, m)
-		},
-	})
+	actions := b.groupActions()
+	join := b.groupCommand(actions["join"])
+	leave := b.groupCommand(actions["leave"])
+	mention := b.groupCommand(actions["m"])
+	del := b.groupCommand(actions["del"])
+	show := b.groupCommand(actions["show"])
 
 	cmds := []command{
 		{names: []string{"new"}, usage: "/new <name>", help: "Create a mention group (lowercase letters, numbers, dashes)", handler: b.handleNewGroup},
@@ -118,7 +132,7 @@ func helpText(commands []command) string {
 Parameters in [brackets] are optional. Group names and aliases are not case-sensitive.
 
 Tips:
-- Use /join or /leave without a name to get a keyboard with available groups
+- Use /join, /leave, /m, /show or /del without a name to get buttons with the available groups
 - Mention groups inline by typing @group or several like @devs,@qa in a message
 - A group named all will automatically include everyone who speaks in the chat`)
 
@@ -129,7 +143,7 @@ Tips:
 // with a name it runs the action on that group, without one it offers a picker.
 func (b *Bot) groupCommand(action groupAction) commandHandler {
 	return func(ctx context.Context, message t.Message) error {
-		slog.Debug("bot: Handling group command", "command", action.keyboardCommand, "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
+		slog.Debug("bot: Handling group command", "command", action.key, "chat_id", message.Chat.ID, "from_user_id", message.From.ID)
 
 		b.sendTyping(ctx, tu.ID(message.Chat.ID))
 
@@ -142,46 +156,48 @@ func (b *Bot) groupCommand(action groupAction) commandHandler {
 
 		return b.executeOnGroup(ctx, message.Chat.ID, groupName, &message, action.notFound,
 			func(group *storage.MentionGroup, original *t.Message) error {
-				return action.run(ctx, group, original)
+				out := action.run(ctx, group, message.From, original)
+				if !out.silent {
+					b.sendMessage(ctx, message.Chat.ID, out.render(), original)
+				}
+
+				return nil
 			})
 	}
 }
 
-func (b *Bot) groupsFor(ctx context.Context, message t.Message, source groupSource) ([]storage.MentionGroup, error) {
+func (b *Bot) groupsFor(ctx context.Context, chatID, userID int64, source groupSource) ([]storage.MentionGroup, error) {
 	switch source {
 	case sourceJoinable:
-		return b.storage.GetGroupsToJoinByChatAndUser(ctx, message.Chat.ID, message.From.ID)
+		return b.storage.GetGroupsToJoinByChatAndUser(ctx, chatID, userID)
 	case sourceMine:
-		return b.storage.GetUserGroupsByChat(ctx, message.Chat.ID, message.From.ID)
+		return b.storage.GetUserGroupsByChat(ctx, chatID, userID)
 	default:
-		return b.storage.GetGroupsByChat(ctx, message.Chat.ID)
+		return b.storage.GetGroupsByChat(ctx, chatID)
 	}
 }
 
 func (b *Bot) showGroupPicker(ctx context.Context, message t.Message, action groupAction) error {
 	chatID := message.Chat.ID
 
-	groups, err := b.groupsFor(ctx, message, action.source)
+	groups, err := b.groupsFor(ctx, chatID, message.From.ID, action.source)
 	if err != nil {
 		slog.Error("bot: Failed to get groups for picker", "error", err, "chat_id", chatID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)), &message)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to get groups."), &message)
 
 		return nil
 	}
 
-	keyboard := b.createGroupSelectionReplyKeyboard(action.keyboardCommand, groups)
+	keyboard := groupPickerKeyboard(action.key, groups, 0, message.From.ID)
 	if keyboard == nil {
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("No groups available to "+action.verb+"."), &message)
 
 		return nil
 	}
 
-	msg := tu.Message(tu.ID(chatID), escapeMarkdownV2("Select a group to "+action.verb+"."))
-	msg.ReplyMarkup = keyboard
-	msg.ParseMode = "MarkdownV2"
-	_, err = b.api.SendMessage(ctx, b.reply(message, msg))
+	b.sendMessage(ctx, chatID, escapeMarkdownV2("Select a group to "+action.verb+"."), &message, keyboard)
 
-	return err
+	return nil
 }
 
 func (b *Bot) handleNewGroup(ctx context.Context, message t.Message) error {

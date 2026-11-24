@@ -13,11 +13,16 @@ import (
 type API interface {
 	SendMessage(ctx context.Context, params *t.SendMessageParams) (*t.Message, error)
 	SendChatAction(ctx context.Context, params *t.SendChatActionParams) error
+	AnswerCallbackQuery(ctx context.Context, params *t.AnswerCallbackQueryParams) error
+	EditMessageText(ctx context.Context, params *t.EditMessageTextParams) (*t.Message, error)
+	EditMessageReplyMarkup(ctx context.Context, params *t.EditMessageReplyMarkupParams) (*t.Message, error)
+	DeleteMessage(ctx context.Context, params *t.DeleteMessageParams) error
 }
 
 // Store is the persistence the handlers need. *storage.Storage satisfies it.
 type Store interface {
 	CreateGroup(ctx context.Context, name string, chatID int64) error
+	GetGroupByID(ctx context.Context, id uint) (*storage.MentionGroup, error)
 	GetGroup(ctx context.Context, name string, chatID int64) (*storage.MentionGroup, error)
 	CreateOrUpdateUser(ctx context.Context, userID int64, username, firstName, lastName string) (*storage.User, error)
 	AddMember(ctx context.Context, groupID uint, user *storage.User) (bool, error)

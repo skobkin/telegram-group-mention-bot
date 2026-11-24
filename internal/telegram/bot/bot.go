@@ -172,6 +172,10 @@ func (b *Bot) registerHandlers(h *th.BotHandler) {
 		}, th.Or(predicates...))
 	}
 
+	h.HandleCallbackQuery(func(ctx *th.Context, query t.CallbackQuery) error {
+		return b.handleCallback(ctx, query)
+	}, th.CallbackDataPrefix(callbackPrefix))
+
 	h.HandleMessage(func(ctx *th.Context, message t.Message) error {
 		return b.handleFreeFormMessage(ctx, message)
 	}, th.Not(th.AnyCommand()))

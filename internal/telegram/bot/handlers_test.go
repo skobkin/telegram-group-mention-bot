@@ -19,6 +19,46 @@ type fakeAPI struct {
 	mu      sync.Mutex
 	sent    []*t.SendMessageParams
 	actions int
+	answers []*t.AnswerCallbackQueryParams
+	edits   []*t.EditMessageTextParams
+	markups []*t.EditMessageReplyMarkupParams
+	deleted []*t.DeleteMessageParams
+}
+
+func (f *fakeAPI) AnswerCallbackQuery(_ context.Context, params *t.AnswerCallbackQueryParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.answers = append(f.answers, params)
+
+	return nil
+}
+
+func (f *fakeAPI) EditMessageText(_ context.Context, params *t.EditMessageTextParams) (*t.Message, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.edits = append(f.edits, params)
+
+	return &t.Message{MessageID: params.MessageID}, nil
+}
+
+func (f *fakeAPI) EditMessageReplyMarkup(_ context.Context, params *t.EditMessageReplyMarkupParams) (*t.Message, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.markups = append(f.markups, params)
+
+	return &t.Message{MessageID: params.MessageID}, nil
+}
+
+func (f *fakeAPI) DeleteMessage(_ context.Context, params *t.DeleteMessageParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.deleted = append(f.deleted, params)
+
+	return nil
 }
 
 func (f *fakeAPI) SendMessage(_ context.Context, params *t.SendMessageParams) (*t.Message, error) {
@@ -203,13 +243,13 @@ func TestPickersOfferTheRightGroups(tb *testing.T) {
 	h.group("qa")
 
 	keyboardTexts := func(p *t.SendMessageParams) []string {
-		kb, ok := p.ReplyMarkup.(*t.ReplyKeyboardMarkup)
+		kb, ok := p.ReplyMarkup.(*t.InlineKeyboardMarkup)
 		if !ok {
-			tb.Fatalf("expected a reply keyboard, got %T", p.ReplyMarkup)
+			tb.Fatalf("expected an inline keyboard, got %T", p.ReplyMarkup)
 		}
 
 		var texts []string
-		for _, row := range kb.Keyboard {
+		for _, row := range kb.InlineKeyboard {
 			for _, button := range row {
 				texts = append(texts, button.Text)
 			}
@@ -218,11 +258,11 @@ func TestPickersOfferTheRightGroups(tb *testing.T) {
 		return texts
 	}
 
-	if got := keyboardTexts(h.run(alice, "/join")); len(got) != 1 || got[0] != "/join qa" {
+	if got := keyboardTexts(h.run(alice, "/join")); len(got) != 1 || got[0] != "qa" {
 		tb.Fatalf("join picker should offer only groups not joined yet, got %v", got)
 	}
 
-	if got := keyboardTexts(h.run(alice, "/leave")); len(got) != 1 || got[0] != "/leave devs" {
+	if got := keyboardTexts(h.run(alice, "/leave")); len(got) != 1 || got[0] != "devs" {
 		tb.Fatalf("leave picker should offer only joined groups, got %v", got)
 	}
 
