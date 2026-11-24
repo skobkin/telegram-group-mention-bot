@@ -167,7 +167,7 @@ func (b *Bot) groupCommand(action groupAction) commandHandler {
 			func(group *storage.MentionGroup, original *t.Message) error {
 				out := action.run(ctx, group, message.From, original)
 				if !out.silent {
-					b.sendMessage(ctx, message.Chat.ID, out.render(), original)
+					b.respond(ctx, original, out)
 				}
 
 				return nil
@@ -242,7 +242,7 @@ func (b *Bot) handleNewGroup(ctx context.Context, message t.Message) error {
 	}
 
 	slog.Info("bot: Group created", "group_name", groupName, "chat_id", message.Chat.ID)
-	b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Group '%s' created successfully!\nTo join this group, use: /join %s", groupName, groupName)), &message)
+	b.respond(ctx, &message, outcome{text: fmt.Sprintf("Group '%s' created successfully!\nTo join this group, use: /join %s", groupName, groupName), ok: true})
 
 	return nil
 }

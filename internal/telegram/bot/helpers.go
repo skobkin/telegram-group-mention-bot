@@ -120,7 +120,7 @@ func isValidGroupName(name string) bool {
 	return true
 }
 
-func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
+func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessage *t.Message, autoDelete bool, replyMarkup ...t.ReplyMarkup) *t.Message {
 	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text_length", len(text), "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
 
 	message := tu.Message(tu.ID(chatID), text)
@@ -133,7 +133,7 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 		message = b.reply(*originalMessage, message)
 	}
 
-	_, err := b.api.SendMessage(ctx, message)
+	sent, err := b.api.SendMessage(ctx, message)
 	if err != nil {
 		// Check if it's a rate limit error
 		if strings.Contains(err.Error(), "Too Many Requests") {
@@ -146,10 +146,11 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 				if _, _ = fmt.Sscanf(parts[1], "%d", &retryAfter); retryAfter > 0 {
 					slog.Info("bot:helpers: Rate limit hit, waiting", "seconds", retryAfter)
 					time.Sleep(time.Duration(retryAfter) * time.Second)
-					_, retryErr := b.api.SendMessage(ctx, message)
+					retried, retryErr := b.api.SendMessage(ctx, message)
 					if retryErr != nil {
 						err = retryErr
 					} else {
+						sent, err = retried, nil
 						slog.Info("bot:helpers: Message sent successfully after rate limit wait")
 					}
 				}
@@ -157,10 +158,34 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 		}
 		if err != nil {
 			slog.Error("bot:helpers: Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
+
+			return nil
 		}
 	} else {
 		slog.Debug("bot:helpers: Message sent successfully")
 	}
+
+	if autoDelete && sent != nil {
+		ids := []int{sent.MessageID}
+		if originalMessage != nil {
+			ids = append(ids, originalMessage.MessageID)
+		}
+
+		b.scheduleDelete(chatID, ids...)
+	}
+
+	return sent
+}
+
+// sendMessage sends a service reply (confirmation, error, list, picker). With AUTO_DELETE_SECONDS set,
+// the reply and the command it answers are deleted after that time.
+func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
+	b.send(ctx, chatID, text, originalMessage, true, replyMarkup...)
+}
+
+// sendPost sends content people are meant to keep, such as mention posts; it is never auto-deleted.
+func (b *Bot) sendPost(ctx context.Context, chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
+	b.send(ctx, chatID, text, originalMessage, false, replyMarkup...)
 }
 
 func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) *t.SendMessageParams {

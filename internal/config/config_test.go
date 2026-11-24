@@ -72,11 +72,23 @@ func TestLoadMentionLimits(t *testing.T) {
 		t.Fatalf("unexpected overrides: %+v, %v", cfg, err)
 	}
 
-	for _, name := range []string{"MENTION_GROUP_COOLDOWN_SECONDS", "MENTION_USER_COOLDOWN_SECONDS", "MENTION_MAX_MEMBERS"} {
+	for _, name := range []string{"MENTION_GROUP_COOLDOWN_SECONDS", "MENTION_USER_COOLDOWN_SECONDS", "MENTION_MAX_MEMBERS", "AUTO_DELETE_SECONDS"} {
 		for _, bad := range []string{"-1", "x", "1.5"} {
 			if _, err := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t", name: bad})); err == nil {
 				t.Fatalf("expected error for %s=%q", name, bad)
 			}
 		}
+	}
+}
+
+func TestLoadAutoDelete(t *testing.T) {
+	cfg, _ := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t"}))
+	if cfg.AutoDelete != 0 {
+		t.Fatalf("auto-delete must be off by default, got %v", cfg.AutoDelete)
+	}
+
+	cfg, err := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t", "AUTO_DELETE_SECONDS": "60"}))
+	if err != nil || cfg.AutoDelete != time.Minute {
+		t.Fatalf("unexpected: %v, %v", cfg.AutoDelete, err)
 	}
 }

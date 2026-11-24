@@ -29,6 +29,9 @@ type Bot struct {
 
 	admins adminCache
 
+	autoDelete time.Duration               // 0 disables
+	afterFunc  func(time.Duration, func()) // test hook; nil means time.AfterFunc
+
 	groupCooldown time.Duration // 0 disables
 	userCooldown  time.Duration // 0 disables
 	maxMentions   int           // 0 means unlimited
@@ -49,6 +52,8 @@ type Options struct {
 	// OwnerIDs enables owner-only tools (/stats) for these Telegram user IDs.
 	OwnerIDs []int64
 	// GroupCooldown and UserCooldown throttle mentions (0 disables); MaxMentionMembers caps pings per post (0 = unlimited).
+	// AutoDelete deletes service replies and the commands they answer after this time (0 disables).
+	AutoDelete        time.Duration
 	GroupCooldown     time.Duration
 	UserCooldown      time.Duration
 	MaxMentionMembers int
@@ -79,6 +84,7 @@ func New(token string, store Store, opts Options) (*Bot, error) {
 		owners:    owners,
 		startedAt: time.Now(),
 
+		autoDelete:    opts.AutoDelete,
 		groupCooldown: opts.GroupCooldown,
 		userCooldown:  opts.UserCooldown,
 		maxMentions:   opts.MaxMentionMembers,
@@ -99,6 +105,7 @@ func (b *Bot) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get bot information: %w", err)
 	}
 	b.me = botInfoFromMe(me)
+	b.syncCommandMenu(ctx)
 	slog.Info("bot: Bot started",
 		"id", b.me.ID,
 		"username", b.me.Username,

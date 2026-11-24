@@ -31,6 +31,8 @@ type Config struct {
 	MentionGroupCooldown time.Duration
 	// MentionUserCooldown is the minimum time between two mentions by the same user in a chat (0 disables).
 	MentionUserCooldown time.Duration
+	// AutoDelete removes the bot's service replies and the commands they answer after this time (0 disables).
+	AutoDelete time.Duration
 	// MentionMaxMembers caps how many members one mention post pings (0 means unlimited).
 	MentionMaxMembers int
 }
@@ -69,6 +71,13 @@ func Load(getenv func(string) string) (Config, error) {
 
 	cfg.MentionGroupCooldown = time.Duration(groupSeconds) * time.Second
 	cfg.MentionUserCooldown = time.Duration(userSeconds) * time.Second
+
+	autoDelete, err := parseNonNegativeInt(getenv, "AUTO_DELETE_SECONDS", 0)
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg.AutoDelete = time.Duration(autoDelete) * time.Second
 
 	cfg.MentionMaxMembers, err = parseNonNegativeInt(getenv, "MENTION_MAX_MEMBERS", 0)
 	if err != nil {

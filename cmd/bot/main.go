@@ -59,6 +59,7 @@ func run() int {
 
 	b, err := bot.New(cfg.TelegramToken, store, bot.Options{
 		OwnerIDs:          cfg.OwnerIDs,
+		AutoDelete:        cfg.AutoDelete,
 		GroupCooldown:     cfg.MentionGroupCooldown,
 		UserCooldown:      cfg.MentionUserCooldown,
 		MaxMentionMembers: cfg.MentionMaxMembers,

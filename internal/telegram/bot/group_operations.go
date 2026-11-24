@@ -166,7 +166,7 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	}
 
 	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText), "skipped", skipped)
-	b.sendMessage(ctx, chatID, finalText, originalMessage, joinLeaveKeyboard(buttons))
+	b.sendPost(ctx, chatID, finalText, originalMessage, joinLeaveKeyboard(buttons))
 
 	return nil
 }

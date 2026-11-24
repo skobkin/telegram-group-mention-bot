@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,9 +25,48 @@ type fakeAPI struct {
 	markups []*t.EditMessageReplyMarkupParams
 	deleted []*t.DeleteMessageParams
 
+	reactions   []*t.SetMessageReactionParams
+	reactionErr error
+	menus       map[string][]t.BotCommand // scope type -> commands registered
+	menuSets    int
+
 	// chat member statuses by user ID for GetChatMember; missing means "member"
 	statuses  map[int64]string
 	adminCall int
+}
+
+func (f *fakeAPI) SetMessageReaction(_ context.Context, params *t.SetMessageReactionParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.reactionErr != nil {
+		return f.reactionErr
+	}
+
+	f.reactions = append(f.reactions, params)
+
+	return nil
+}
+
+func (f *fakeAPI) GetMyCommands(_ context.Context, params *t.GetMyCommandsParams) ([]t.BotCommand, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.menus[params.Scope.ScopeType()], nil
+}
+
+func (f *fakeAPI) SetMyCommands(_ context.Context, params *t.SetMyCommandsParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.menus == nil {
+		f.menus = make(map[string][]t.BotCommand)
+	}
+
+	f.menus[params.Scope.ScopeType()] = params.Commands
+	f.menuSets++
+
+	return nil
 }
 
 func (f *fakeAPI) GetChatMember(_ context.Context, params *t.GetChatMemberParams) (t.ChatMember, error) {
@@ -129,7 +169,7 @@ func newHarness(tb *testing.T) *harness {
 
 	tb.Cleanup(func() { _ = store.Close() })
 
-	api := &fakeAPI{}
+	api := &fakeAPI{reactionErr: errors.New("REACTION_INVALID")}
 
 	return &harness{
 		t:     tb,

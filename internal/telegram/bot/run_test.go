@@ -57,7 +57,7 @@ func TestRunStopsOnContextCancel(tt *testing.T) {
 		tt.Fatal(err)
 	}
 
-	b := &Bot{bot: api, storage: store}
+	b := &Bot{bot: api, api: api, storage: store}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

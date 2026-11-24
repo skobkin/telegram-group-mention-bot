@@ -17,6 +17,9 @@ type API interface {
 	EditMessageText(ctx context.Context, params *t.EditMessageTextParams) (*t.Message, error)
 	EditMessageReplyMarkup(ctx context.Context, params *t.EditMessageReplyMarkupParams) (*t.Message, error)
 	GetChatMember(ctx context.Context, params *t.GetChatMemberParams) (t.ChatMember, error)
+	SetMessageReaction(ctx context.Context, params *t.SetMessageReactionParams) error
+	GetMyCommands(ctx context.Context, params *t.GetMyCommandsParams) ([]t.BotCommand, error)
+	SetMyCommands(ctx context.Context, params *t.SetMyCommandsParams) error
 	DeleteMessage(ctx context.Context, params *t.DeleteMessageParams) error
 }
 

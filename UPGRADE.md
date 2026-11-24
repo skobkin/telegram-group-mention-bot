@@ -4,6 +4,12 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- Successful `/new`, `/join`, `/leave`, `/del` are now acknowledged with a 👍 reaction instead of a text reply (text fallback when the chat
+  does not allow reactions). Errors and informational replies stay text.
+- The bot registers its commands with `setMyCommands` at startup (private chats and groups, only when the list changed).
+  This overwrites commands previously set via @BotFather for those scopes.
+- New optional `AUTO_DELETE_SECONDS` (default 0 = off): delete service replies and the commands they answer after N seconds.
+  Requires the bot to have delete-messages rights; failures are ignored. Pending deletions are lost on restart.
 - **Behavior change:** mentions are now rate-limited by default: 30 s per group and 10 s per user in a chat (chat admins are exempt),
   with one short notice per window. Set `MENTION_GROUP_COOLDOWN_SECONDS=0` and `MENTION_USER_COOLDOWN_SECONDS=0` to keep the old behavior.
   `MENTION_MAX_MEMBERS` (default 0 = unlimited) optionally caps pings per post. Cooldown state is in memory and resets on restart.
