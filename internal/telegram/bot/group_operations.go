@@ -224,22 +224,21 @@ func (b *Bot) allowMention(ctx context.Context, chatID int64, groups []storage.M
 		rules = append(rules, cooldownRule{key: fmt.Sprintf("u:%d:%d", chatID, actor.ID), window: b.userCooldown})
 	}
 
-	exempt := func() bool {
-		if actor == nil {
-			return false
-		}
-
-		return actor.ID == anonymousAdminBotID || b.isChatAdmin(ctx, chatID, actor.ID)
-	}
-
-	res := b.cooldowns.reserve(b.clock(), rules, exempt)
+	res := b.cooldowns.reserve(b.clock(), rules)
 	if !res.blocked {
 		return true
 	}
 
-	slog.Debug("bot: Mention throttled", "chat_id", chatID, "wait", res.wait.String(), "notify", res.notify)
+	// Chat admins are exempt; this may call the Telegram API, so it happens outside the tracker's lock
+	if actor != nil && (actor.ID == anonymousAdminBotID || b.isChatAdmin(ctx, chatID, actor.ID)) {
+		return true
+	}
 
-	if res.notify {
+	notify := b.cooldowns.firstNotice(res.key)
+
+	slog.Debug("bot: Mention throttled", "chat_id", chatID, "wait", res.wait.String(), "notify", notify)
+
+	if notify {
 		seconds := int((res.wait + time.Second - 1) / time.Second)
 		b.sendMessage(ctx, chatID, md(langOf(actor), "throttle.wait", seconds), originalMessage)
 	}

@@ -148,15 +148,15 @@ func TestCooldownTrackerBoundsMemory(tb *testing.T) {
 	now := time.Unix(1000, 0)
 
 	for i := range 2000 {
-		c.reserve(now, []cooldownRule{{key: string(rune('a' + i%26)), window: time.Second}}, nil)
+		c.reserve(now, []cooldownRule{{key: string(rune('a' + i%26)), window: time.Second}})
 	}
 
 	later := now.Add(time.Hour)
 	for i := range 1100 {
-		c.reserve(later, []cooldownRule{{key: "k" + time.Duration(i).String(), window: time.Hour}}, nil)
+		c.reserve(later, []cooldownRule{{key: "k" + time.Duration(i).String(), window: time.Hour}})
 	}
 
-	c.reserve(later.Add(2*time.Hour), []cooldownRule{{key: "x", window: time.Second}}, nil)
+	c.reserve(later.Add(2*time.Hour), []cooldownRule{{key: "x", window: time.Second}})
 
 	if len(c.entries) > 3 {
 		tb.Fatalf("expired entries must be pruned, got %d", len(c.entries))

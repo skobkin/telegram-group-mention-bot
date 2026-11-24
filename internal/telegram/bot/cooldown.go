@@ -27,15 +27,13 @@ type cooldownTracker struct {
 type throttleResult struct {
 	blocked bool
 	wait    time.Duration
-	key     string
-	notify  bool // true only for the first blocked attempt of a window
+	key     string // the rule with the longest remaining wait
 }
 
-// reserve checks all rules. If none is active, it starts every window and reports not blocked.
-// If any is active, nothing is started; the result carries the longest wait and whether this
-// is the first blocked attempt for that rule (so the notice is sent once per window).
-// A caller for whom exempt returns true is never blocked and leaves no trace (no window started).
-func (c *cooldownTracker) reserve(now time.Time, rules []cooldownRule, exempt func() bool) throttleResult {
+// reserve checks all rules. If none is active it starts every window and reports not blocked.
+// If any is active nothing changes; the result carries the rule with the longest wait.
+// It never calls out while holding the lock, so callers can do slow checks (admin lookups) afterwards.
+func (c *cooldownTracker) reserve(now time.Time, rules []cooldownRule) throttleResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -65,18 +63,11 @@ func (c *cooldownTracker) reserve(now time.Time, rules []cooldownRule, exempt fu
 		}
 
 		if wait := entry.until.Sub(now); wait > worst.wait {
-			worst = throttleResult{blocked: true, wait: wait, key: rule.key, notify: !entry.noticed}
+			worst = throttleResult{blocked: true, wait: wait, key: rule.key}
 		}
 	}
 
 	if worst.blocked {
-		// Admins bypass the limit without starting or touching any window
-		if exempt != nil && exempt() {
-			return throttleResult{}
-		}
-
-		c.entries[worst.key].noticed = true
-
 		return worst
 	}
 
@@ -87,4 +78,20 @@ func (c *cooldownTracker) reserve(now time.Time, rules []cooldownRule, exempt fu
 	}
 
 	return throttleResult{}
+}
+
+// firstNotice reports whether the throttle notice for the rule's current window was not sent yet,
+// and marks it as sent.
+func (c *cooldownTracker) firstNotice(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entry := c.entries[key]
+	if entry == nil || entry.noticed {
+		return false
+	}
+
+	entry.noticed = true
+
+	return true
 }
