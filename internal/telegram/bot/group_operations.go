@@ -19,17 +19,20 @@ func (b *Bot) joinGroupOperation(ctx context.Context, group *storage.MentionGrou
 	if err != nil {
 		slog.Error("bot: Failed to add user to group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to join group: %v", err)), originalMessage)
+
 		return nil
 	}
 
 	if !added {
 		slog.Debug("bot: User is already a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are already a member of group '%s'.", group.Name)), originalMessage)
+
 		return nil
 	}
 
 	slog.Info("bot: User joined group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 	b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You have joined group '%s'!", group.Name)), originalMessage)
+
 	return nil
 }
 
@@ -40,17 +43,20 @@ func (b *Bot) leaveGroupOperation(ctx context.Context, group *storage.MentionGro
 	if err != nil {
 		slog.Error("bot: Failed to remove user from group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to leave group: %v", err)), originalMessage)
+
 		return nil
 	}
 
 	if !removed {
 		slog.Debug("bot: User is not a member of the group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You are not a member of group '%s'.", group.Name)), originalMessage)
+
 		return nil
 	}
 
 	slog.Info("bot: User left group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 	b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("You have left group '%s'!", group.Name)), originalMessage)
+
 	return nil
 }
 
@@ -62,6 +68,7 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	for _, group := range groups {
 		if len(group.Members) == 0 {
 			slog.Debug("bot: Group has no members", "group_name", group.Name, "chat_id", chatID)
+
 			continue
 		}
 		groupNames = append(groupNames, group.Name)
@@ -76,6 +83,7 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	if len(groupLines) == 0 {
 		slog.Debug("bot: No members to mention", "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("No members to mention."), originalMessage)
+
 		return nil
 	}
 
@@ -83,6 +91,7 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	finalText := header + "\n\n" + strings.Join(groupLines, "\n")
 	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText))
 	b.sendMessage(ctx, chatID, finalText, originalMessage)
+
 	return nil
 }
 
@@ -92,6 +101,7 @@ func (b *Bot) deleteGroupOperation(ctx context.Context, group *storage.MentionGr
 	if len(group.Members) > 0 {
 		slog.Debug("bot: Cannot delete group with members", "group_name", group.Name, "chat_id", chatID, "member_count", len(group.Members))
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("Cannot delete group: it has members. Ask members to /leave first."), originalMessage)
+
 		return nil
 	}
 
@@ -99,11 +109,13 @@ func (b *Bot) deleteGroupOperation(ctx context.Context, group *storage.MentionGr
 	if err != nil {
 		slog.Error("bot: Failed to delete group", "error", err, "group_name", group.Name, "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to delete group: %v", err)), originalMessage)
+
 		return nil
 	}
 
 	slog.Info("bot: Group deleted", "group_name", group.Name, "chat_id", chatID)
 	b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Group '%s' has been deleted!", group.Name)), originalMessage)
+
 	return nil
 }
 
@@ -113,6 +125,7 @@ func (b *Bot) showGroupMembersOperation(ctx context.Context, group *storage.Ment
 	if len(group.Members) == 0 {
 		slog.Debug("bot: Group has no members", "group_name", group.Name, "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Group '%s' has no members.", group.Name)), originalMessage)
+
 		return nil
 	}
 
@@ -121,5 +134,6 @@ func (b *Bot) showGroupMembersOperation(ctx context.Context, group *storage.Ment
 	messageText := header + strings.Join(memberList, "\n")
 	slog.Debug("bot: Sending member list", "chat_id", chatID, "member_count", len(memberList))
 	b.sendMessage(ctx, chatID, escapeMarkdownV2(messageText), originalMessage, &t.ReplyKeyboardRemove{RemoveKeyboard: true})
+
 	return nil
 }

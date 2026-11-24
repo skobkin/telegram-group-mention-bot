@@ -1,6 +1,6 @@
 # Telegram Group Mention Bot
 
-[![Build Status](https://ci.skobk.in/api/badges/skobkin/telegram-group-mention-bot/status.svg)](https://ci.skobk.in/skobkin/telegram-group-mention-bot)
+[![build status](https://ci.skobk.in/api/badges/skobkin/telegram-group-mention-bot/status.svg)](https://ci.skobk.in/skobkin/telegram-group-mention-bot) [![latest release](https://git.skobk.in/skobkin/telegram-group-mention-bot/badges/release.svg)](https://git.skobk.in/skobkin/telegram-group-mention-bot/releases)
 
 A Telegram bot that allows users to create mention groups and mention all members of a group at once.
 
@@ -78,3 +78,24 @@ Note: Command-line flags take precedence over the `LOG_LEVEL` environment variab
 - [telego](https://github.com/mymmrac/telego) - Telegram Bot API library
 - [gorm](https://gorm.io) - ORM library, with the CGO-free [glebarez/sqlite](https://github.com/glebarez/sqlite) driver
 - [godotenv](https://github.com/joho/godotenv) - Environment variables loader 
+
+## Development
+
+```bash
+go build ./cmd/bot
+go vet ./...
+go test ./...
+golangci-lint fmt --diff ./cmd/bot ./internal
+golangci-lint run ./cmd/bot/... ./internal/...
+```
+
+### CI
+
+CI runs on Woodpecker (`.woodpecker/ci.yaml`): fmt, lint, vet, test and build on every pull request and on pushes
+to `main`; tags additionally publish a Forgejo release (GoReleaser) and a Docker image. Required repository secrets:
+
+| Secret | Used for |
+|--------|----------|
+| `GITEA_TOKEN` | Creating the Forgejo release |
+| `DOCKER_REPO` | Docker image repository |
+| `DOCKER_LOGIN`, `DOCKER_TOKEN` | Docker registry credentials |

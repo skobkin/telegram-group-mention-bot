@@ -102,6 +102,7 @@ func TestParallelJoinsProduceOneRow(t *testing.T) {
 			added, err := s.AddMember(ctx, group.ID, user)
 			if err != nil {
 				t.Errorf("parallel add failed: %v", err)
+
 				return
 			}
 

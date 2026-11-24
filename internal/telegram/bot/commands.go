@@ -152,13 +152,7 @@ func (b *Bot) showGroupPicker(ctx context.Context, message t.Message, action gro
 		return nil
 	}
 
-	keyboard, err := b.createGroupSelectionReplyKeyboard(action.keyboardCommand, groups)
-	if err != nil {
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Failed to create keyboard: %v", err)), &message)
-
-		return nil
-	}
-
+	keyboard := b.createGroupSelectionReplyKeyboard(action.keyboardCommand, groups)
 	if keyboard == nil {
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("No groups available to "+action.verb+"."), &message)
 
@@ -179,12 +173,14 @@ func (b *Bot) handleNewGroup(ctx context.Context, message t.Message) error {
 	args := strings.Fields(message.Text)
 	if len(args) != 2 {
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("Usage: /new <group_name>\nGroup name can only contain lowercase letters, numbers, and dashes."), &message)
+
 		return nil
 	}
 
 	groupName := strings.ToLower(args[1])
 	if !isValidGroupName(groupName) {
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("Invalid group name. Group name can only contain lowercase letters, numbers, and dashes."), &message)
+
 		return nil
 	}
 
@@ -193,6 +189,7 @@ func (b *Bot) handleNewGroup(ctx context.Context, message t.Message) error {
 	if err := b.storage.CreateGroup(ctx, groupName, message.Chat.ID); err != nil {
 		slog.Error("bot: Failed to create group", "error", err, "group_name", groupName, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create group: %v", err)), &message)
+
 		return nil
 	}
 
@@ -215,11 +212,13 @@ func (b *Bot) handleList(ctx context.Context, message t.Message) error {
 	if err != nil {
 		slog.Error("bot: Failed to get groups", "error", err, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)), &message)
+
 		return nil
 	}
 
 	if len(groups) == 0 {
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("No groups found in this chat."), &message)
+
 		return nil
 	}
 
@@ -235,11 +234,13 @@ func (b *Bot) handleMy(ctx context.Context, message t.Message) error {
 	if err != nil {
 		slog.Error("bot: Failed to get user's groups", "error", err, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get your groups: %v", err)), &message)
+
 		return nil
 	}
 
 	if len(groups) == 0 {
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("You haven't joined any groups in this chat."), &message)
+
 		return nil
 	}
 
@@ -255,7 +256,7 @@ func formatGroupList(header string, groups []storage.MentionGroup) string {
 	sb.WriteString(header)
 
 	for _, group := range groups {
-		sb.WriteString(fmt.Sprintf("• %s\n", escapeMarkdownV2(group.Name)))
+		fmt.Fprintf(&sb, "• %s\n", escapeMarkdownV2(group.Name))
 	}
 
 	return sb.String()
@@ -268,11 +269,13 @@ func (b *Bot) handleClearEmptyGroups(ctx context.Context, message t.Message) err
 	if err != nil {
 		slog.Error("bot: Failed to clear empty groups", "error", err, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to delete empty groups: %v", err)), &message)
+
 		return nil
 	}
 
 	if len(removedGroups) == 0 {
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("No empty groups to delete."), &message)
+
 		return nil
 	}
 
@@ -315,6 +318,7 @@ func (b *Bot) handleFreeFormMessage(ctx context.Context, message t.Message) erro
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, message.Chat.ID, groupNames)
 	if err != nil {
 		slog.Error("bot: Failed to find groups", "error", err, "chat_id", message.Chat.ID)
+
 		return nil
 	}
 

@@ -19,6 +19,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	verbose := flag.Bool("v", false, "Enable verbose logging (LevelInfo)")
 	veryVerbose := flag.Bool("vv", false, "Enable very verbose logging (LevelDebug)")
 	flag.Parse()
@@ -37,7 +41,8 @@ func main() {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		slog.Error("main: Invalid configuration", "error", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -48,13 +53,15 @@ func main() {
 	store, err := storage.New(cfg.DatabasePath)
 	if err != nil {
 		slog.Error("main: Failed to initialize storage", "error", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	b, err := bot.New(cfg.TelegramToken, store)
 	if err != nil {
 		slog.Error("main: Failed to initialize bot", "error", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	err = b.Run(ctx)
@@ -64,10 +71,13 @@ func main() {
 
 	if err != nil {
 		slog.Error("main: Bot stopped with error", "error", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	slog.Info("main: Shutdown complete")
+
+	return 0
 }
 
 // setupLogging configures JSON logging. Level precedence: -vv, -v, LOG_LEVEL, default warn.

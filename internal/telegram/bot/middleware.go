@@ -103,6 +103,7 @@ func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
 
 	if err := b.storage.MigrateChatGroups(ctx, from, to); err != nil {
 		slog.Error("bot:middleware: Failed to migrate chat groups", "error", err, "from_chat_id", from, "to_chat_id", to)
+
 		return err
 	}
 
@@ -130,10 +131,12 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			slog.Debug("bot:middleware: 'all' group not found", "chat_id", msg.Chat.ID)
+
 			return ctx.Next(update)
 		}
 		// Some other error occurred
 		slog.Error("bot:middleware: Failed to check for 'all' group", "error", err, "chat_id", msg.Chat.ID)
+
 		return ctx.Next(update)
 	}
 

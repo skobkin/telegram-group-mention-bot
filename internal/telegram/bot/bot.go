@@ -32,10 +32,12 @@ func New(token string, store Store) (*Bot, error) {
 	bot, err := t.NewBot(token, t.WithLogger(logging.TelegoLogger{}))
 	if err != nil {
 		slog.Error("bot: Failed to create bot", "error", err, "token_length", len(token))
+
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
 	slog.Debug("bot: Bot instance created successfully")
+
 	return &Bot{
 		bot:     bot,
 		api:     bot,
@@ -53,6 +55,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	me, err := b.bot.GetMe(ctx)
 	if err != nil {
 		slog.Error("bot: Failed to get bot information", "error", err)
+
 		return fmt.Errorf("failed to get bot information: %w", err)
 	}
 	b.me = botInfoFromMe(me)
@@ -70,12 +73,14 @@ func (b *Bot) Run(ctx context.Context) error {
 	updates, err := b.bot.UpdatesViaLongPolling(ctx, nil)
 	if err != nil {
 		slog.Error("bot: Failed to get updates channel", "error", err)
+
 		return fmt.Errorf("failed to get updates channel: %w", err)
 	}
 
 	h, err := th.NewBotHandler(b.bot, updates)
 	if err != nil {
 		slog.Error("bot: Failed to create handler", "error", err)
+
 		return fmt.Errorf("failed to create handler: %w", err)
 	}
 

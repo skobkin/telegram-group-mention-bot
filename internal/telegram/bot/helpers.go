@@ -57,6 +57,7 @@ func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
 	}
 
 	slog.Debug("bot:helpers: Member list formatted", "formatted_count", len(memberList))
+
 	return memberList
 }
 
@@ -81,15 +82,17 @@ func (b *Bot) formatMentions(members []storage.GroupMember) []string {
 	}
 
 	slog.Debug("bot:helpers: Mentions formatted", "mention_count", len(mentions))
+
 	return mentions
 }
 
-func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) (*t.ReplyKeyboardMarkup, error) {
+func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []storage.MentionGroup) *t.ReplyKeyboardMarkup {
 	slog.Debug("bot:helpers: Creating group selection keyboard", "command_prefix", commandPrefix, "group_count", len(groups))
 
 	if len(groups) == 0 {
 		slog.Debug("bot:helpers: No groups available for keyboard, returning nil")
-		return nil, nil
+
+		return nil
 	}
 
 	// Create keyboard with 2 columns
@@ -108,20 +111,21 @@ func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []s
 	}
 
 	slog.Debug("bot:helpers: Group selection keyboard created", "row_count", len(keyboard))
+
 	return &t.ReplyKeyboardMarkup{
 		Keyboard:              keyboard,
 		ResizeKeyboard:        true,
 		OneTimeKeyboard:       true,
 		Selective:             true,
 		InputFieldPlaceholder: "Select group",
-	}, nil
+	}
 }
 
 func escapeMarkdownV2(text string) string {
 	var result strings.Builder
 	for _, r := range text {
 		// Only escape non-alphanumeric ASCII characters (codes 1-126)
-		if r > 0 && r < 127 && !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+		if r > 0 && r < 127 && (r < '0' || r > '9') && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
 			result.WriteRune('\\')
 		}
 		result.WriteRune(r)
@@ -135,16 +139,19 @@ func isValidGroupName(name string) bool {
 
 	if len(name) == 0 {
 		slog.Debug("bot:helpers: Group name is empty")
+
 		return false
 	}
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 			slog.Debug("bot:helpers: Group name contains invalid character", "char", string(c))
+
 			return false
 		}
 	}
 
 	slog.Debug("bot:helpers: Group name is valid")
+
 	return true
 }
 
@@ -193,6 +200,7 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 
 func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) *t.SendMessageParams {
 	slog.Debug("bot:helpers: Creating reply message", "original_message_id", originalMessage.MessageID)
+
 	return newMessage.WithReplyParameters(&t.ReplyParameters{
 		MessageID: originalMessage.MessageID,
 	})
