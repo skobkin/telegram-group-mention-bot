@@ -6,9 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"telegram-group-mention-bot/internal/telegram/bot"
 	"telegram-group-mention-bot/internal/logging"
 	"telegram-group-mention-bot/internal/storage"
+	"telegram-group-mention-bot/internal/support/secretscrub"
+	"telegram-group-mention-bot/internal/telegram/bot"
 
 	"github.com/joho/godotenv"
 )
@@ -24,7 +25,7 @@ func main() {
 
 	// The scrubber guarantees the bot token never reaches the logs
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	setLogLevel(*verbose, *veryVerbose, logging.NewScrubber(token))
+	setLogLevel(*verbose, *veryVerbose, secretscrub.New(secretscrub.TelegramTokenSecrets(token)))
 
 	slog.Debug("main: Command-line flags parsed", "verbose", *verbose, "very_verbose", *veryVerbose)
 
@@ -79,7 +80,7 @@ func main() {
 }
 
 // setLogLevel configures the logging level based on the provided flags and environment variable
-func setLogLevel(verbose, veryVerbose bool, scrubber *logging.Scrubber) {
+func setLogLevel(verbose, veryVerbose bool, scrubber *secretscrub.Scrubber) {
 	// Determine logging level based on flags and environment variable
 	logLevel := slog.LevelWarn // Default level
 

@@ -6,40 +6,32 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"telegram-group-mention-bot/internal/support/secretscrub"
 )
 
-func newTestLogger(buf *bytes.Buffer, secrets ...string) *slog.Logger {
-	inner := slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+const token = "123456789:AAH-secretSecretSecret_123456789012"
 
-	return slog.New(NewScrubHandler(NewScrubber(secrets...), inner))
-}
-
-func TestScrubHandlerRedactsSecrets(t *testing.T) {
-	const token = "123456:SECRET-token"
-
+func TestScrubHandlerNeverEmitsToken(t *testing.T) {
 	var buf bytes.Buffer
 
-	logger := newTestLogger(&buf, token).With("pre", "has "+token).WithGroup("g")
-	logger.Error("failed "+token,
-		"string", "url/bot"+token+"/getMe",
-		"err", errors.New("Post https://api/bot"+token+": timeout"),
-		"nested", slog.Group("n", slog.String("k", token)),
+	scrubber := secretscrub.New(secretscrub.TelegramTokenSecrets(token))
+	logger := slog.New(NewScrubHandler(scrubber, slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	logger.With("pre", "has "+token).WithGroup("g").Error("failed "+token,
+		"string", "https://api/bot"+token+"/getMe",
+		"err", errors.New("Post: "+token),
+		"group", slog.Group("n", slog.String("k", token)),
 		"any", []string{token},
 		token, "key",
 	)
 
 	out := buf.String()
-	if strings.Contains(out, token) {
-		t.Fatalf("secret leaked into log output: %s", out)
+	if strings.Contains(out, "AAH-secret") || strings.Contains(out, "123456789:AAH") {
+		t.Fatalf("token leaked into log output: %s", out)
 	}
 
-	if !strings.Contains(out, redacted) {
+	if !strings.Contains(out, "[REDACTED:") {
 		t.Fatalf("expected redaction marker in %s", out)
-	}
-}
-
-func TestScrubberIgnoresEmptySecret(t *testing.T) {
-	if got := NewScrubber("").Scrub("text"); got != "text" {
-		t.Fatalf("unexpected scrub result %q", got)
 	}
 }
