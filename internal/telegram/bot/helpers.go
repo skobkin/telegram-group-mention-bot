@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"telegram-group-mention-bot/storage"
+	"telegram-group-mention-bot/internal/storage"
 
 	t "github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"

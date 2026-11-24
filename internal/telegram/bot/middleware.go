@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
-	"telegram-group-mention-bot/storage"
+	"telegram-group-mention-bot/internal/storage"
 
 	t "github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"

@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"telegram-group-mention-bot/bot"
+	"telegram-group-mention-bot/internal/telegram/bot"
 	"telegram-group-mention-bot/internal/logging"
-	"telegram-group-mention-bot/storage"
+	"telegram-group-mention-bot/internal/storage"
 
 	"github.com/joho/godotenv"
 )
