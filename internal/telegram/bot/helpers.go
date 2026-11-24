@@ -13,26 +13,29 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 )
 
-// executeOnGroup executes a function on a group if it exists
-func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, operation func(*storage.MentionGroup, *t.Message) error) error {
-	slog.Debug("bot:helpers: Requested operation execution on group", "chat_id", chatID, "group_name", groupName)
-
+// executeOnGroup executes a function on a group if it exists. notFound is the reply
+// format for a missing group (%s = name); empty means "Group not found.".
+func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, notFound string, operation func(*storage.MentionGroup, *t.Message) error) error {
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, chatID, []string{groupName})
 	if err != nil {
-		slog.Error("bot:helpers: Failed to get group", "error", err,
-			"group_name", groupName, "chat_id", chatID)
+		slog.Error("bot:helpers: Failed to get group", "error", err, "group_name", groupName, "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
+
 		return err
 	}
+
 	if len(groups) == 0 {
-		slog.Debug("bot:helpers: Group not found", "group_name", groupName, "chat_id", chatID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2("Group not found."), originalMessage)
+		text := "Group not found."
+		if notFound != "" {
+			text = fmt.Sprintf(notFound, groupName)
+		}
+
+		b.sendMessage(ctx, chatID, escapeMarkdownV2(text), originalMessage)
+
 		return storage.ErrNotFound
 	}
-	group := &groups[0]
 
-	slog.Debug("bot:helpers: Group found, executing operation", "group_id", group.ID, "group_name", group.Name)
-	return operation(group, originalMessage)
+	return operation(&groups[0], originalMessage)
 }
 
 // formatMemberList formats a list of members for display
@@ -158,7 +161,7 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 		message = b.reply(*originalMessage, message)
 	}
 
-	_, err := b.bot.SendMessage(ctx, message)
+	_, err := b.api.SendMessage(ctx, message)
 	if err != nil {
 		// Check if it's a rate limit error
 		if strings.Contains(err.Error(), "Too Many Requests") {
@@ -171,7 +174,7 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 				if _, _ = fmt.Sscanf(parts[1], "%d", &retryAfter); retryAfter > 0 {
 					slog.Info("bot:helpers: Rate limit hit, waiting", "seconds", retryAfter)
 					time.Sleep(time.Duration(retryAfter) * time.Second)
-					_, retryErr := b.bot.SendMessage(ctx, message)
+					_, retryErr := b.api.SendMessage(ctx, message)
 					if retryErr != nil {
 						err = retryErr
 					} else {
@@ -188,27 +191,6 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, origin
 	}
 }
 
-// AddMember adds a user to a mention group
-func (b *Bot) AddMember(ctx context.Context, groupID uint, userID int64, username, firstName, lastName string) error {
-	slog.Debug("bot:helpers: Adding member to group", "group_id", groupID, "user_id", userID)
-
-	// First ensure the user exists in the database
-	user, err := b.storage.CreateOrUpdateUser(ctx, userID, username, firstName, lastName)
-	if err != nil {
-		slog.Error("bot:helpers: Failed to create/update user", "error", err, "user_id", userID)
-		return fmt.Errorf("failed to create/update user: %w", err)
-	}
-
-	// Then add them to the group
-	if _, err := b.storage.AddMember(ctx, groupID, user); err != nil {
-		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID)
-		return fmt.Errorf("failed to add member: %w", err)
-	}
-
-	slog.Info("bot:helpers: User added to group", "group_id", groupID, "user_id", userID)
-	return nil
-}
-
 func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) *t.SendMessageParams {
 	slog.Debug("bot:helpers: Creating reply message", "original_message_id", originalMessage.MessageID)
 	return newMessage.WithReplyParameters(&t.ReplyParameters{
@@ -218,7 +200,7 @@ func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) 
 
 func (b *Bot) sendTyping(ctx context.Context, chatID t.ChatID) {
 	slog.Debug("bot:helpers: Setting 'typing' chat action", "chat_id", chatID)
-	err := b.bot.SendChatAction(ctx, tu.ChatAction(chatID, "typing"))
+	err := b.api.SendChatAction(ctx, tu.ChatAction(chatID, "typing"))
 	if err != nil {
 		slog.Error("bot:helpers: Cannot set chat action", "error", err)
 	}

@@ -1,0 +1,32 @@
+package bot
+
+import (
+	"context"
+
+	"telegram-group-mention-bot/internal/storage"
+
+	t "github.com/mymmrac/telego"
+)
+
+// API is the subset of the Telegram Bot API used by handlers. *telego.Bot satisfies it;
+// tests inject a fake.
+type API interface {
+	SendMessage(ctx context.Context, params *t.SendMessageParams) (*t.Message, error)
+	SendChatAction(ctx context.Context, params *t.SendChatActionParams) error
+}
+
+// Store is the persistence the handlers need. *storage.Storage satisfies it.
+type Store interface {
+	CreateGroup(ctx context.Context, name string, chatID int64) error
+	GetGroup(ctx context.Context, name string, chatID int64) (*storage.MentionGroup, error)
+	CreateOrUpdateUser(ctx context.Context, userID int64, username, firstName, lastName string) (*storage.User, error)
+	AddMember(ctx context.Context, groupID uint, user *storage.User) (bool, error)
+	RemoveMember(ctx context.Context, groupID uint, userID int64) (bool, error)
+	DeleteGroup(ctx context.Context, groupID uint) error
+	DeleteEmptyGroups(ctx context.Context, chatID int64, keepName string) ([]string, error)
+	GetGroupsByChat(ctx context.Context, chatID int64) ([]storage.MentionGroup, error)
+	GetGroupsToJoinByChatAndUser(ctx context.Context, chatID int64, userID int64) ([]storage.MentionGroup, error)
+	GetUserGroupsByChat(ctx context.Context, chatID int64, userID int64) ([]storage.MentionGroup, error)
+	FindGroupsByChatAndNamesWithMembers(ctx context.Context, chatID int64, names []string) ([]storage.MentionGroup, error)
+	MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error
+}
