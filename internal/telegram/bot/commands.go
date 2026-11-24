@@ -57,8 +57,8 @@ func (b *Bot) groupActions() map[string]groupAction {
 				return b.leaveGroup(ctx, g, actor.ID, g.ChatID)
 			}},
 		{key: "m", verb: "mention", source: sourceAll, notFound: "Group '%s' not found.",
-			run: func(ctx context.Context, g *storage.MentionGroup, _ *t.User, origin *t.Message) outcome {
-				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, origin); err != nil {
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, origin *t.Message) outcome {
+				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, origin, actor); err != nil {
 					slog.Error("bot: Failed to mention group", "error", err, "chat_id", g.ChatID)
 				}
 
@@ -494,7 +494,7 @@ func (b *Bot) handleFreeFormMessage(ctx context.Context, message t.Message) erro
 
 	b.sendTyping(ctx, tu.ID(message.Chat.ID))
 
-	if err := b.mentionGroups(ctx, groups, message.Chat.ID, &message); err != nil {
+	if err := b.mentionGroups(ctx, groups, message.Chat.ID, &message, message.From); err != nil {
 		slog.Error("bot: Failed to mention group members", "error", err, "chat_id", message.Chat.ID)
 	}
 

@@ -12,6 +12,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 - Support for users with and without usernames
 - List group members without mentioning them
 - Delete empty groups
+- Anti-spam: per-group and per-user mention cooldowns (chat admins are exempt) and an optional cap on pinged members
 - Case-insensitive group names, plus aliases and renaming
 - Inline button pickers when a command is used without a group name (only the requester can use them), and Join/Leave buttons under every mention post
 
@@ -66,6 +67,9 @@ docker run -d \
 |----------|-------------|---------|
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from [@BotFather](https://t.me/botfather) | (required) |
 | `DATABASE_PATH` | Path to the SQLite database file | `data.sqlite` |
+| `MENTION_GROUP_COOLDOWN_SECONDS` | Minimum seconds between two mentions of the same group in a chat (0 disables) | `30` |
+| `MENTION_USER_COOLDOWN_SECONDS` | Minimum seconds between two mentions by the same user in a chat (0 disables) | `10` |
+| `MENTION_MAX_MEMBERS` | Maximum members pinged per mention post; the rest are reported as skipped (0 = unlimited) | `0` |
 | `BOT_OWNER_IDS` | Comma-separated Telegram user IDs allowed to use `/stats` (private chat only); empty disables owner tools | empty |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `warn` |
 

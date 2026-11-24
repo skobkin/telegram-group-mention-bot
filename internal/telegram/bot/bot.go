@@ -28,7 +28,12 @@ type Bot struct {
 	startedAt time.Time
 
 	admins adminCache
-	now    func() time.Time // test hook; nil means time.Now
+
+	groupCooldown time.Duration // 0 disables
+	userCooldown  time.Duration // 0 disables
+	maxMentions   int           // 0 means unlimited
+	cooldowns     cooldownTracker
+	now           func() time.Time // test hook; nil means time.Now
 }
 
 func (b *Bot) clock() time.Time {
@@ -43,6 +48,10 @@ func (b *Bot) clock() time.Time {
 type Options struct {
 	// OwnerIDs enables owner-only tools (/stats) for these Telegram user IDs.
 	OwnerIDs []int64
+	// GroupCooldown and UserCooldown throttle mentions (0 disables); MaxMentionMembers caps pings per post (0 = unlimited).
+	GroupCooldown     time.Duration
+	UserCooldown      time.Duration
+	MaxMentionMembers int
 }
 
 func New(token string, store Store, opts Options) (*Bot, error) {
@@ -69,6 +78,10 @@ func New(token string, store Store, opts Options) (*Bot, error) {
 		storage:   store,
 		owners:    owners,
 		startedAt: time.Now(),
+
+		groupCooldown: opts.GroupCooldown,
+		userCooldown:  opts.UserCooldown,
+		maxMentions:   opts.MaxMentionMembers,
 	}, nil
 }
 

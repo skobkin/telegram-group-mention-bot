@@ -4,6 +4,9 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- **Behavior change:** mentions are now rate-limited by default: 30 s per group and 10 s per user in a chat (chat admins are exempt),
+  with one short notice per window. Set `MENTION_GROUP_COOLDOWN_SECONDS=0` and `MENTION_USER_COOLDOWN_SECONDS=0` to keep the old behavior.
+  `MENTION_MAX_MEMBERS` (default 0 = unlimited) optionally caps pings per post. Cooldown state is in memory and resets on restart.
 - New admin commands `/add`, `/remove` and `/del <name> force`. Admin status is checked with `getChatMember` (cached for 60 s),
   so the bot needs to be a member of the chat; for the check of *other* users Telegram only guarantees results when the bot is an admin there.
 - Reply keyboards are gone: `/join`, `/leave`, `/m`, `/show`, `/del` without a name now show an inline keyboard that is edited in place,

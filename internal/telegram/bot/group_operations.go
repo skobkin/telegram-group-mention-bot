@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"telegram-group-mention-bot/internal/storage"
 
@@ -97,41 +98,115 @@ func (b *Bot) showGroupMembers(group *storage.MentionGroup) outcome {
 	return outcome{text: escapeMarkdownV2(header + strings.Join(memberList, "\n")), md: true}
 }
 
-// mentionGroups posts one mention message for the groups. originalMessage (may be nil) is
-// the message the post replies to and whose forum topic it stays in.
-func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message) error {
+// anonymousAdminBotID is the user ID Telegram shows for messages sent by anonymous group admins.
+const anonymousAdminBotID int64 = 1087968824
+
+// mentionGroups posts one mention message for the groups on behalf of actor. originalMessage
+// (may be nil) is the message the post replies to and whose forum topic it stays in.
+// Cooldowns and the member cap apply here, so commands, buttons and free-form mentions share them.
+func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message, actor *t.User) error {
 	slog.Debug("bot: Mentioning groups", "chat_id", chatID, "group_count", len(groups))
 
-	var groupNames []string
-	var groupLines []string
-	var buttons []storage.MentionGroup
+	var withMembers []storage.MentionGroup
 	for _, group := range groups {
 		if len(group.Members) == 0 {
 			slog.Debug("bot: Group has no members", "group_name", group.Name, "chat_id", chatID)
 
 			continue
 		}
-		groupNames = append(groupNames, group.Name)
-		buttons = append(buttons, group)
-		mentions := b.formatMentions(group.Members)
-		if len(mentions) == 0 {
-			continue
-		}
-		groupLine := fmt.Sprintf("%s: %s", escapeMarkdownV2(group.Name), strings.Join(mentions, ", "))
-		groupLines = append(groupLines, groupLine)
+
+		withMembers = append(withMembers, group)
 	}
 
-	if len(groupLines) == 0 {
+	if len(withMembers) == 0 {
 		slog.Debug("bot: No members to mention", "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("No members to mention."), originalMessage)
 
 		return nil
 	}
 
+	if !b.allowMention(ctx, chatID, withMembers, originalMessage, actor) {
+		return nil
+	}
+
+	budget := b.maxMentions // 0 = unlimited
+	skipped := 0
+
+	var groupNames []string
+	var groupLines []string
+	var buttons []storage.MentionGroup
+	for _, group := range withMembers {
+		members := group.Members
+
+		if b.maxMentions > 0 {
+			if budget < len(members) {
+				skipped += len(members) - budget
+				members = members[:budget]
+			}
+
+			budget -= len(members)
+		}
+
+		groupNames = append(groupNames, group.Name)
+		buttons = append(buttons, group)
+
+		if len(members) == 0 {
+			continue
+		}
+
+		mentions := b.formatMentions(members)
+		groupLines = append(groupLines, fmt.Sprintf("%s: %s", escapeMarkdownV2(group.Name), strings.Join(mentions, ", ")))
+	}
+
 	header := fmt.Sprintf("⚠️ %s ⚠️", escapeMarkdownV2(strings.Join(groupNames, ", ")))
 	finalText := header + "\n\n" + strings.Join(groupLines, "\n")
-	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText))
+
+	if skipped > 0 {
+		finalText += "\n\n" + escapeMarkdownV2(fmt.Sprintf("…and %d more not pinged (limit: %d per post).", skipped, b.maxMentions))
+	}
+
+	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText), "skipped", skipped)
 	b.sendMessage(ctx, chatID, finalText, originalMessage, joinLeaveKeyboard(buttons))
 
 	return nil
+}
+
+// allowMention applies the per-group and per-user cooldowns. When a mention is throttled it
+// posts one short notice per cooldown window and returns false. Chat admins are exempt.
+func (b *Bot) allowMention(ctx context.Context, chatID int64, groups []storage.MentionGroup, originalMessage *t.Message, actor *t.User) bool {
+	if b.groupCooldown <= 0 && b.userCooldown <= 0 {
+		return true
+	}
+
+	var rules []cooldownRule
+
+	for _, group := range groups {
+		rules = append(rules, cooldownRule{key: fmt.Sprintf("g:%d:%d", chatID, group.ID), window: b.groupCooldown})
+	}
+
+	if actor != nil {
+		rules = append(rules, cooldownRule{key: fmt.Sprintf("u:%d:%d", chatID, actor.ID), window: b.userCooldown})
+	}
+
+	exempt := func() bool {
+		if actor == nil {
+			return false
+		}
+
+		return actor.ID == anonymousAdminBotID || b.isChatAdmin(ctx, chatID, actor.ID)
+	}
+
+	res := b.cooldowns.reserve(b.clock(), rules, exempt)
+	if !res.blocked {
+		return true
+	}
+
+	slog.Debug("bot: Mention throttled", "chat_id", chatID, "wait", res.wait.String(), "notify", res.notify)
+
+	if res.notify {
+		seconds := int((res.wait + time.Second - 1) / time.Second)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Please wait %d s before mentioning again.", seconds)), originalMessage)
+	}
+
+	return false
 }

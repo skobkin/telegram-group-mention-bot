@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 )
 
 func env(values map[string]string) func(string) string {
@@ -51,6 +52,31 @@ func TestLoadOwnerIDs(t *testing.T) {
 	for _, bad := range []string{"abc", "-5", "0", "1,x"} {
 		if _, err := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t", "BOT_OWNER_IDS": bad})); err == nil {
 			t.Fatalf("expected error for BOT_OWNER_IDS=%q", bad)
+		}
+	}
+}
+
+func TestLoadMentionLimits(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t"}))
+	if err != nil || cfg.MentionGroupCooldown != 30*time.Second || cfg.MentionUserCooldown != 10*time.Second || cfg.MentionMaxMembers != 0 {
+		t.Fatalf("unexpected defaults: %+v, %v", cfg, err)
+	}
+
+	cfg, err = Load(env(map[string]string{
+		"TELEGRAM_BOT_TOKEN":             "t",
+		"MENTION_GROUP_COOLDOWN_SECONDS": "0",
+		"MENTION_USER_COOLDOWN_SECONDS":  "5",
+		"MENTION_MAX_MEMBERS":            "25",
+	}))
+	if err != nil || cfg.MentionGroupCooldown != 0 || cfg.MentionUserCooldown != 5*time.Second || cfg.MentionMaxMembers != 25 {
+		t.Fatalf("unexpected overrides: %+v, %v", cfg, err)
+	}
+
+	for _, name := range []string{"MENTION_GROUP_COOLDOWN_SECONDS", "MENTION_USER_COOLDOWN_SECONDS", "MENTION_MAX_MEMBERS"} {
+		for _, bad := range []string{"-1", "x", "1.5"} {
+			if _, err := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t", name: bad})); err == nil {
+				t.Fatalf("expected error for %s=%q", name, bad)
+			}
 		}
 	}
 }

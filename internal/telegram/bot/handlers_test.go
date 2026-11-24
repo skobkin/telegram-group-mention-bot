@@ -472,3 +472,24 @@ func TestAliasCommands(tb *testing.T) {
 	contains(tb, h.run(alice, "/unalias dev"), "not found")
 	contains(tb, h.run(alice, "/m dev"), "not found")
 }
+
+func ctxBG() context.Context { return context.Background() }
+
+// run2 is run without asserting that a reply exists.
+func (h *harness) run2(from *t.User, text string) {
+	h.t.Helper()
+
+	name := strings.TrimPrefix(strings.Fields(text)[0], "/")
+
+	for _, cmd := range h.bot.commands() {
+		for _, n := range cmd.names {
+			if n == name {
+				_ = cmd.handler(context.Background(), h.msg(from, text))
+
+				return
+			}
+		}
+	}
+
+	h.t.Fatalf("unknown command %q", name)
+}
