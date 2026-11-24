@@ -26,6 +26,17 @@ type Bot struct {
 
 	owners    map[int64]struct{} // users allowed to use owner tools; empty disables them
 	startedAt time.Time
+
+	admins adminCache
+	now    func() time.Time // test hook; nil means time.Now
+}
+
+func (b *Bot) clock() time.Time {
+	if b.now != nil {
+		return b.now()
+	}
+
+	return time.Now()
 }
 
 // Options are the optional settings of a Bot.

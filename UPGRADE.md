@@ -4,6 +4,8 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- New admin commands `/add`, `/remove` and `/del <name> force`. Admin status is checked with `getChatMember` (cached for 60 s),
+  so the bot needs to be a member of the chat; for the check of *other* users Telegram only guarantees results when the bot is an admin there.
 - Reply keyboards are gone: `/join`, `/leave`, `/m`, `/show`, `/del` without a name now show an inline keyboard that is edited in place,
   and mention posts carry Join/Leave buttons. The bot now handles `callback_query` updates (no configuration needed).
 - New optional `BOT_OWNER_IDS` (comma-separated Telegram user IDs). Owners get a hidden `/stats` command in a private chat with the bot

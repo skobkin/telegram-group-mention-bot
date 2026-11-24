@@ -72,7 +72,7 @@ func (b *Bot) deleteGroup(ctx context.Context, group *storage.MentionGroup, chat
 	slog.Debug("bot: Deleting group", "group_name", group.Name, "chat_id", chatID)
 
 	if len(group.Members) > 0 {
-		return outcome{text: "Cannot delete group: it has members. Ask members to /leave first."}
+		return outcome{text: "Cannot delete group: it has members. Ask members to /leave first (chat admins can use /del <name> force)."}
 	}
 
 	if err := b.storage.DeleteGroup(ctx, group.ID); err != nil {

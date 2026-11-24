@@ -87,7 +87,14 @@ func (b *Bot) commands() []command {
 	join := b.groupCommand(actions["join"])
 	leave := b.groupCommand(actions["leave"])
 	mention := b.groupCommand(actions["m"])
-	del := b.groupCommand(actions["del"])
+	plainDel := b.groupCommand(actions["del"])
+	del := func(ctx context.Context, message t.Message) error {
+		if args := strings.Fields(message.Text); forceDeleteRequested(args) {
+			return b.handleForceDelete(ctx, message, args[1])
+		}
+
+		return plainDel(ctx, message)
+	}
 	show := b.groupCommand(actions["show"])
 
 	cmds := []command{
@@ -96,10 +103,12 @@ func (b *Bot) commands() []command {
 		{names: []string{"leave"}, usage: "/leave [<name>]", help: "Leave a group you are in", handler: leave},
 		{names: []string{"mention", "m", "call"}, usage: "/mention <name> or /m <name> or /call <name>", help: "Mention everyone in a group", handler: mention, menu: []string{"mention", "call"}},
 		{names: []string{"show"}, usage: "/show <name>", help: "List members without pinging them", handler: show},
-		{names: []string{"del"}, usage: "/del <name>", help: "Delete a group (only when it is empty)", handler: del},
+		{names: []string{"del"}, usage: "/del <name> [force]", help: "Delete a group (when it is empty; admins can add \"force\" to delete a group with members)", handler: del},
 		{names: []string{"list"}, usage: "/list", help: "Show all groups in this chat", handler: b.handleList},
 		{names: []string{"my"}, usage: "/my", help: "Show groups you have joined in this chat", handler: b.handleMy},
 		{names: []string{"clear"}, usage: "/clear", help: "Delete all empty groups in this chat", handler: b.handleClearEmptyGroups},
+		{names: []string{"add"}, usage: "/add <group>", help: "Admins: add the user you reply to (or mention) to a group", handler: b.handleAdminMember(true)},
+		{names: []string{"remove"}, usage: "/remove <group>", help: "Admins: remove the user you reply to (or mention) from a group", handler: b.handleAdminMember(false)},
 		{names: []string{"rename"}, usage: "/rename <old> <new>", help: "Rename a group (members are kept)", handler: b.handleRename},
 		{names: []string{"alias"}, usage: "/alias <group> <alias>", help: "Add a short alias for a group", handler: b.handleAlias},
 		{names: []string{"unalias"}, usage: "/unalias <alias>", help: "Remove an alias", handler: b.handleUnalias},

@@ -45,6 +45,9 @@ var errBadCallback = errors.New("invalid callback data")
 // pickerActions lists the actions a callback may trigger; anything else is rejected.
 var pickerActions = map[string]bool{"join": true, "leave": true, "m": true, "del": true, "show": true}
 
+// confirmActions are the Delete (df) and Cancel (dx) buttons of a force-delete confirmation.
+var confirmActions = map[string]bool{"df": true, "dx": true}
+
 // parseCallback validates callback data (version, action whitelist, numeric fields).
 func parseCallback(raw string) (callbackData, error) {
 	parts := strings.Split(raw, ":")
@@ -67,7 +70,7 @@ func parseCallback(raw string) (callbackData, error) {
 		return callbackData{paging: true, action: parts[2], page: page, requester: requester}, nil
 	}
 
-	if len(parts) != 4 || !pickerActions[parts[1]] {
+	if len(parts) != 4 || !(pickerActions[parts[1]] || confirmActions[parts[1]]) {
 		return callbackData{}, errBadCallback
 	}
 
@@ -201,6 +204,12 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 
 	if isPicker && data.requester != query.From.ID {
 		b.answerCallback(ctx, query.ID, "This menu is not for you.")
+
+		return nil
+	}
+
+	if confirmActions[data.action] {
+		b.handleForceDeleteCallback(ctx, query, msg, data)
 
 		return nil
 	}

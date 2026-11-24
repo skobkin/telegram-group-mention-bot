@@ -16,6 +16,7 @@ type API interface {
 	AnswerCallbackQuery(ctx context.Context, params *t.AnswerCallbackQueryParams) error
 	EditMessageText(ctx context.Context, params *t.EditMessageTextParams) (*t.Message, error)
 	EditMessageReplyMarkup(ctx context.Context, params *t.EditMessageReplyMarkupParams) (*t.Message, error)
+	GetChatMember(ctx context.Context, params *t.GetChatMemberParams) (t.ChatMember, error)
 	DeleteMessage(ctx context.Context, params *t.DeleteMessageParams) error
 }
 
@@ -24,6 +25,7 @@ type Store interface {
 	CreateGroup(ctx context.Context, name string, chatID int64) error
 	GetGroupByID(ctx context.Context, id uint) (*storage.MentionGroup, error)
 	GetGroup(ctx context.Context, name string, chatID int64) (*storage.MentionGroup, error)
+	GetUserByUsername(ctx context.Context, username string) (*storage.User, error)
 	CreateOrUpdateUser(ctx context.Context, userID int64, username, firstName, lastName string) (*storage.User, error)
 	AddMember(ctx context.Context, groupID uint, user *storage.User) (bool, error)
 	RemoveMember(ctx context.Context, groupID uint, userID int64) (bool, error)

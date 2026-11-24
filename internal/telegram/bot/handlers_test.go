@@ -23,6 +23,26 @@ type fakeAPI struct {
 	edits   []*t.EditMessageTextParams
 	markups []*t.EditMessageReplyMarkupParams
 	deleted []*t.DeleteMessageParams
+
+	// chat member statuses by user ID for GetChatMember; missing means "member"
+	statuses  map[int64]string
+	adminCall int
+}
+
+func (f *fakeAPI) GetChatMember(_ context.Context, params *t.GetChatMemberParams) (t.ChatMember, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.adminCall++
+
+	switch f.statuses[params.UserID] {
+	case t.MemberStatusCreator:
+		return &t.ChatMemberOwner{Status: t.MemberStatusCreator}, nil
+	case t.MemberStatusAdministrator:
+		return &t.ChatMemberAdministrator{Status: t.MemberStatusAdministrator}, nil
+	default:
+		return &t.ChatMemberMember{Status: t.MemberStatusMember}, nil
+	}
 }
 
 func (f *fakeAPI) AnswerCallbackQuery(_ context.Context, params *t.AnswerCallbackQueryParams) error {

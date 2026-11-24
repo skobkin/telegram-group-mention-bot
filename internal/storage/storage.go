@@ -174,6 +174,22 @@ func (s *Storage) GetUser(ctx context.Context, userID int64) (*User, error) {
 	return &user, nil
 }
 
+// GetUserByUsername finds a known user by Telegram username (case-insensitive, without "@").
+func (s *Storage) GetUserByUsername(ctx context.Context, username string) (*User, error) {
+	var user User
+
+	result := s.db.WithContext(ctx).Where("lower(username) = lower(?)", strings.TrimPrefix(username, "@")).First(&user)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.Join(ErrNotFound, result.Error)
+		}
+
+		return nil, errors.Join(ErrGet, result.Error)
+	}
+
+	return &user, nil
+}
+
 // CreateOrUpdateUser creates a new user or updates an existing one
 func (s *Storage) CreateOrUpdateUser(ctx context.Context, userID int64, username, firstName, lastName string) (*User, error) {
 	if userID == 0 {

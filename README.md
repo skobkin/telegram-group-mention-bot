@@ -25,6 +25,8 @@ A Telegram bot that allows users to create mention groups and mention all member
 | `/mention <name>`, `/m <name>`, `/call <name>` | Mention all members of a group |
 | `/show <name>` | Show all members of a group without mentioning them |
 | `/del <name>` | Delete a group (only if it has no members) |
+| `/del <name> force` | Chat admins: delete a group together with its members (asks for confirmation) |
+| `/add <group>`, `/remove <group>` | Chat admins: add/remove the user you reply to (or `@mention`) |
 | `/list` | Show all groups in this chat |
 | `/my` | Show groups you've joined in this chat |
 | `/clear` | Delete all empty groups in this chat |
