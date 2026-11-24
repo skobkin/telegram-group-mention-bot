@@ -6,14 +6,13 @@ type botInfo struct {
 	ID                      int64
 	Username                string
 	FirstName               string
-	LastName                string
 	IsBot                   bool
 	CanJoinGroups           bool
 	CanReadAllGroupMessages bool
 	SupportsInlineQueries   bool
 }
 
-func botInfoFromMe(me *t.User) *botInfo {
+func botInfoFromMe(me *t.BotFullInfo) *botInfo {
 	if me == nil {
 		return &botInfo{}
 	}
@@ -22,7 +21,6 @@ func botInfoFromMe(me *t.User) *botInfo {
 		ID:                      me.ID,
 		Username:                me.Username,
 		FirstName:               me.FirstName,
-		LastName:                me.LastName,
 		IsBot:                   me.IsBot,
 		CanJoinGroups:           me.CanJoinGroups,
 		CanReadAllGroupMessages: me.CanReadAllGroupMessages,

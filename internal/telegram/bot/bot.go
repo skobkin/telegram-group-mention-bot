@@ -53,7 +53,6 @@ func (b *Bot) Start() error {
 		"id", b.me.ID,
 		"username", b.me.Username,
 		"first_name", b.me.FirstName,
-		"last_name", b.me.LastName,
 		"is_bot", b.me.IsBot,
 		"can_join_groups", b.me.CanJoinGroups,
 		"can_read_all_group_messages", b.me.CanReadAllGroupMessages,

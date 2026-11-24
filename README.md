@@ -69,7 +69,7 @@ Note: Command-line flags take precedence over the `LOG_LEVEL` environment variab
 
 ## Requirements
 
-- Go 1.16 or later
+- Go 1.27 or later (see `go.mod`)
 - SQLite3
 - Telegram Bot Token (get it from [@BotFather](https://t.me/botfather))
 
