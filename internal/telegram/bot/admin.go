@@ -186,7 +186,7 @@ func (b *Bot) handleAdminMember(add bool) commandHandler {
 
 			return nil
 		case err != nil:
-			slog.Error("bot: Failed to resolve target user", "error", err, "chat_id", chatID)
+			logError("bot: Failed to resolve target user", err, "chat_id", chatID)
 			b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to find the user."), &message)
 
 			return nil
@@ -215,7 +215,7 @@ func (b *Bot) handleAdminMember(add bool) commandHandler {
 func (b *Bot) adminAddMember(ctx context.Context, group *storage.MentionGroup, target *storage.User) outcome {
 	added, err := b.storage.AddMember(ctx, group.ID, &storage.User{ID: target.ID})
 	if err != nil {
-		slog.Error("bot: Failed to add member", "error", err, "group_id", group.ID, "user_id", target.ID)
+		logError("bot: Failed to add member", err, "group_id", group.ID, "user_id", target.ID)
 
 		return outcome{text: "Failed to add the user."}
 	}
@@ -230,7 +230,7 @@ func (b *Bot) adminAddMember(ctx context.Context, group *storage.MentionGroup, t
 func (b *Bot) adminRemoveMember(ctx context.Context, group *storage.MentionGroup, target *storage.User) outcome {
 	removed, err := b.storage.RemoveMember(ctx, group.ID, target.ID)
 	if err != nil {
-		slog.Error("bot: Failed to remove member", "error", err, "group_id", group.ID, "user_id", target.ID)
+		logError("bot: Failed to remove member", err, "group_id", group.ID, "user_id", target.ID)
 
 		return outcome{text: "Failed to remove the user."}
 	}
@@ -304,7 +304,7 @@ func (b *Bot) handleForceDeleteCallback(ctx context.Context, query t.CallbackQue
 	}
 
 	if err := b.storage.DeleteGroup(ctx, group.ID); err != nil {
-		slog.Error("bot: Failed to force-delete group", "error", err, "group_id", group.ID)
+		logError("bot: Failed to force-delete group", err, "group_id", group.ID)
 		b.answerCallback(ctx, query.ID, "Failed to delete group.")
 
 		return

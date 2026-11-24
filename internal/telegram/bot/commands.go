@@ -61,7 +61,7 @@ func (b *Bot) groupActions() map[string]groupAction {
 		{key: "m", verb: "mention", source: sourceAll, notFound: "Group '%s' not found.",
 			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, origin *t.Message, rest string) outcome {
 				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, replyTarget(origin), actor, rest); err != nil {
-					slog.Error("bot: Failed to mention group", "error", err, "chat_id", g.ChatID)
+					logError("bot: Failed to mention group", err, "chat_id", g.ChatID)
 				}
 
 				return outcome{silent: true}
@@ -211,7 +211,7 @@ func (b *Bot) showGroupPicker(ctx context.Context, message t.Message, action gro
 
 	groups, err := b.groupsFor(ctx, chatID, message.From.ID, action.source)
 	if err != nil {
-		slog.Error("bot: Failed to get groups for picker", "error", err, "chat_id", chatID)
+		logError("bot: Failed to get groups for picker", err, "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to get groups."), &message)
 
 		return nil
@@ -255,7 +255,7 @@ func (b *Bot) handleNewGroup(ctx context.Context, message t.Message) error {
 			return nil
 		}
 
-		slog.Error("bot: Failed to create group", "error", err, "group_name", groupName, "chat_id", message.Chat.ID)
+		logError("bot: Failed to create group", err, "group_name", groupName, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to create group: %v", err)), &message)
 
 		return nil
@@ -278,7 +278,7 @@ func (b *Bot) handleList(ctx context.Context, message t.Message) error {
 
 	groups, err := b.storage.GetGroupsByChat(ctx, message.Chat.ID)
 	if err != nil {
-		slog.Error("bot: Failed to get groups", "error", err, "chat_id", message.Chat.ID)
+		logError("bot: Failed to get groups", err, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get groups: %v", err)), &message)
 
 		return nil
@@ -292,7 +292,7 @@ func (b *Bot) handleList(ctx context.Context, message t.Message) error {
 
 	aliases, err := b.storage.GetAliasesByChat(ctx, message.Chat.ID)
 	if err != nil {
-		slog.Error("bot: Failed to get aliases", "error", err, "chat_id", message.Chat.ID)
+		logError("bot: Failed to get aliases", err, "chat_id", message.Chat.ID)
 	}
 
 	counts := b.memberCounts(ctx, message.Chat.ID)
@@ -307,7 +307,7 @@ func (b *Bot) handleMy(ctx context.Context, message t.Message) error {
 
 	groups, err := b.storage.GetUserGroupsByChat(ctx, message.Chat.ID, message.From.ID)
 	if err != nil {
-		slog.Error("bot: Failed to get user's groups", "error", err, "chat_id", message.Chat.ID, "user_id", message.From.ID)
+		logError("bot: Failed to get user's groups", err, "chat_id", message.Chat.ID, "user_id", message.From.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to get your groups: %v", err)), &message)
 
 		return nil
@@ -328,7 +328,7 @@ func (b *Bot) handleMy(ctx context.Context, message t.Message) error {
 func (b *Bot) memberCounts(ctx context.Context, chatID int64) map[uint]int {
 	counts, err := b.storage.GetGroupMemberCounts(ctx, chatID)
 	if err != nil {
-		slog.Error("bot: Failed to count group members", "error", err, "chat_id", chatID)
+		logError("bot: Failed to count group members", err, "chat_id", chatID)
 
 		return nil
 	}
@@ -375,7 +375,7 @@ func (b *Bot) handleClearEmptyGroups(ctx context.Context, message t.Message) err
 
 	removedGroups, err := b.storage.DeleteEmptyGroups(ctx, message.Chat.ID, groupNameAll)
 	if err != nil {
-		slog.Error("bot: Failed to clear empty groups", "error", err, "chat_id", message.Chat.ID)
+		logError("bot: Failed to clear empty groups", err, "chat_id", message.Chat.ID)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2(fmt.Sprintf("Failed to delete empty groups: %v", err)), &message)
 
 		return nil
@@ -533,7 +533,7 @@ func (b *Bot) handleFreeFormMessage(ctx context.Context, message t.Message) erro
 
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, message.Chat.ID, groupNames)
 	if err != nil {
-		slog.Error("bot: Failed to find groups", "error", err, "chat_id", message.Chat.ID)
+		logError("bot: Failed to find groups", err, "chat_id", message.Chat.ID)
 
 		return nil
 	}
@@ -545,7 +545,7 @@ func (b *Bot) handleFreeFormMessage(ctx context.Context, message t.Message) erro
 	b.sendTyping(ctx, tu.ID(message.Chat.ID))
 
 	if err := b.mentionGroups(ctx, groups, message.Chat.ID, &message, message.From, ""); err != nil {
-		slog.Error("bot: Failed to mention group members", "error", err, "chat_id", message.Chat.ID)
+		logError("bot: Failed to mention group members", err, "chat_id", message.Chat.ID)
 	}
 
 	return nil

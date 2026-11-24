@@ -12,6 +12,7 @@ import (
 	"telegram-group-mention-bot/internal/config"
 	"telegram-group-mention-bot/internal/logging"
 	"telegram-group-mention-bot/internal/storage"
+	"telegram-group-mention-bot/internal/support/errreport"
 	"telegram-group-mention-bot/internal/support/secretscrub"
 	"telegram-group-mention-bot/internal/telegram/bot"
 
@@ -43,6 +44,21 @@ func run() int {
 		slog.Error("main: Invalid configuration", "error", err)
 
 		return 1
+	}
+
+	flushReports, err := errreport.Init(errreport.Config{
+		DSN:         cfg.SentryDSN,
+		Environment: cfg.SentryEnvironment,
+		Release:     buildinfo.Version,
+	}, scrubber)
+	if err != nil {
+		slog.Error("main: Sentry initialisation failed, continuing without it", "error", err)
+	}
+
+	defer flushReports()
+
+	if cfg.SentryDSN != "" && err == nil {
+		slog.Info("main: Sentry reporting enabled")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -239,7 +239,7 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 
 	// Joining needs the user row (foreign key); messages create it in middleware, callbacks here
 	if _, err := b.storage.CreateOrUpdateUser(ctx, query.From.ID, query.From.Username, query.From.FirstName, query.From.LastName); err != nil {
-		slog.Error("bot: Failed to sync user for callback", "error", err, "user_id", query.From.ID)
+		logError("bot: Failed to sync user for callback", err, "user_id", query.From.ID)
 		b.answerCallback(ctx, query.ID, "Something went wrong. Please try again.")
 
 		return nil

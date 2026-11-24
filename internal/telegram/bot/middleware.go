@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"telegram-group-mention-bot/internal/storage"
+	"telegram-group-mention-bot/internal/support/errreport"
 
 	t "github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
@@ -14,6 +15,7 @@ import (
 // recoverFromPanic logs a recovered handler panic with its stack and lets the update loop continue.
 func recoverFromPanic(recovered any) error {
 	slog.Error("bot:middleware: Recovered from panic in handler", "panic", fmt.Sprint(recovered), "stack", string(debug.Stack()))
+	errreport.CapturePanic(recovered)
 
 	return nil
 }
@@ -65,9 +67,7 @@ func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
 		from.LastName,
 	)
 	if err != nil {
-		slog.Error("bot:middleware: Failed to update user data",
-			"user_id", from.ID,
-			"error", err)
+		logError("bot:middleware: Failed to update user data", err, "user_id", from.ID)
 	}
 
 	return ctx.Next(update)
@@ -102,7 +102,7 @@ func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
 	slog.Info("bot:middleware: Chat migration detected", "from_chat_id", from, "to_chat_id", to)
 
 	if err := b.storage.MigrateChatGroups(ctx, from, to); err != nil {
-		slog.Error("bot:middleware: Failed to migrate chat groups", "error", err, "from_chat_id", from, "to_chat_id", to)
+		logError("bot:middleware: Failed to migrate chat groups", err, "from_chat_id", from, "to_chat_id", to)
 
 		return err
 	}
@@ -135,7 +135,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 			return ctx.Next(update)
 		}
 		// Some other error occurred
-		slog.Error("bot:middleware: Failed to check for 'all' group", "error", err, "chat_id", msg.Chat.ID)
+		logError("bot:middleware: Failed to check for 'all' group", err, "chat_id", msg.Chat.ID)
 
 		return ctx.Next(update)
 	}
@@ -143,7 +143,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	// Idempotent insert; the user row was created by syncUserData
 	added, err := b.storage.AddMember(ctx, allGroup.ID, &storage.User{ID: from.ID})
 	if err != nil {
-		slog.Error("bot:middleware: Failed to add user to 'all' group", "error", err, "group_id", allGroup.ID, "user_id", from.ID)
+		logError("bot:middleware: Failed to add user to 'all' group", err, "group_id", allGroup.ID, "user_id", from.ID)
 	} else if added {
 		slog.Info("bot:middleware: Added user to 'all' group", "group_id", allGroup.ID, "user_id", from.ID)
 	}

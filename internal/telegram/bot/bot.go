@@ -65,7 +65,7 @@ func New(token string, store Store, opts Options) (*Bot, error) {
 	// Create bot with debug logging
 	bot, err := t.NewBot(token, t.WithLogger(logging.TelegoLogger{}))
 	if err != nil {
-		slog.Error("bot: Failed to create bot", "error", err, "token_length", len(token))
+		logError("bot: Failed to create bot", err, "token_length", len(token))
 
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
@@ -100,7 +100,7 @@ const shutdownTimeout = 10 * time.Second
 func (b *Bot) Run(ctx context.Context) error {
 	me, err := b.bot.GetMe(ctx)
 	if err != nil {
-		slog.Error("bot: Failed to get bot information", "error", err)
+		logError("bot: Failed to get bot information", err)
 
 		return fmt.Errorf("failed to get bot information: %w", err)
 	}
@@ -119,14 +119,14 @@ func (b *Bot) Run(ctx context.Context) error {
 	// The updates channel is closed when ctx is cancelled
 	updates, err := b.bot.UpdatesViaLongPolling(ctx, nil)
 	if err != nil {
-		slog.Error("bot: Failed to get updates channel", "error", err)
+		logError("bot: Failed to get updates channel", err)
 
 		return fmt.Errorf("failed to get updates channel: %w", err)
 	}
 
 	h, err := th.NewBotHandler(b.bot, updates)
 	if err != nil {
-		slog.Error("bot: Failed to create handler", "error", err)
+		logError("bot: Failed to create handler", err)
 
 		return fmt.Errorf("failed to create handler: %w", err)
 	}

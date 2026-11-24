@@ -92,3 +92,15 @@ func TestLoadAutoDelete(t *testing.T) {
 		t.Fatalf("unexpected: %v, %v", cfg.AutoDelete, err)
 	}
 }
+
+func TestLoadSentry(t *testing.T) {
+	cfg, _ := Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t"}))
+	if cfg.SentryDSN != "" || cfg.SentryEnvironment != "" {
+		t.Fatalf("sentry must be disabled by default: %+v", cfg)
+	}
+
+	cfg, _ = Load(env(map[string]string{"TELEGRAM_BOT_TOKEN": "t", "SENTRY_DSN": " https://k@s.example/1 ", "SENTRY_ENVIRONMENT": "prod"}))
+	if cfg.SentryDSN != "https://k@s.example/1" || cfg.SentryEnvironment != "prod" {
+		t.Fatalf("unexpected: %+v", cfg)
+	}
+}

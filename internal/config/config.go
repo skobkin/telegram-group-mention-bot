@@ -31,6 +31,9 @@ type Config struct {
 	MentionGroupCooldown time.Duration
 	// MentionUserCooldown is the minimum time between two mentions by the same user in a chat (0 disables).
 	MentionUserCooldown time.Duration
+	// SentryDSN enables Sentry error reporting when set; SentryEnvironment is its optional environment tag.
+	SentryDSN         string
+	SentryEnvironment string
 	// AutoDelete removes the bot's service replies and the commands they answer after this time (0 disables).
 	AutoDelete time.Duration
 	// MentionMaxMembers caps how many members one mention post pings (0 means unlimited).
@@ -51,6 +54,9 @@ func Load(getenv func(string) string) (Config, error) {
 	if cfg.DatabasePath == "" {
 		cfg.DatabasePath = defaultDatabasePath
 	}
+
+	cfg.SentryDSN = strings.TrimSpace(getenv("SENTRY_DSN"))
+	cfg.SentryEnvironment = strings.TrimSpace(getenv("SENTRY_ENVIRONMENT"))
 
 	owners, err := parseIDList("BOT_OWNER_IDS", getenv("BOT_OWNER_IDS"))
 	if err != nil {

@@ -4,6 +4,9 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- New optional `SENTRY_DSN` / `SENTRY_ENVIRONMENT`: unexpected errors and recovered panics are reported to Sentry (disabled when the DSN
+  is empty). Events are scrubbed of the bot token; expected outcomes (not found, already exists, Telegram 403/429, context cancellation)
+  are not reported. Adds the `sentry-go` dependency.
 - Bot messages no longer generate link previews, `/list` and `/my` show member counts, and long `/show` lists use an expandable quote
   (needs a Telegram client that supports expandable blockquotes; older clients show a plain quote).
 - Successful `/new`, `/join`, `/leave`, `/del` are now acknowledged with a 👍 reaction instead of a text reply (text fallback when the chat

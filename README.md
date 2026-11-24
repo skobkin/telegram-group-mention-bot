@@ -73,6 +73,8 @@ docker run -d \
 | `MENTION_GROUP_COOLDOWN_SECONDS` | Minimum seconds between two mentions of the same group in a chat (0 disables) | `30` |
 | `MENTION_USER_COOLDOWN_SECONDS` | Minimum seconds between two mentions by the same user in a chat (0 disables) | `10` |
 | `MENTION_MAX_MEMBERS` | Maximum members pinged per mention post; the rest are reported as skipped (0 = unlimited) | `0` |
+| `SENTRY_DSN` | Enables Sentry error reporting when set (token and secrets are scrubbed; cancellation is never reported) | empty |
+| `SENTRY_ENVIRONMENT` | Optional Sentry environment tag; the release is the build version | empty |
 | `AUTO_DELETE_SECONDS` | Delete the bot's service replies and the commands they answer after this many seconds (needs delete rights in the chat; mention posts are never deleted; 0 = off) | `0` |
 | `BOT_OWNER_IDS` | Comma-separated Telegram user IDs allowed to use `/stats` (private chat only); empty disables owner tools | empty |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `warn` |

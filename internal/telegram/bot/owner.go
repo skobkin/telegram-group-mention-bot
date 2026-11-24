@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"telegram-group-mention-bot/internal/buildinfo"
@@ -27,7 +26,7 @@ func (b *Bot) handleStats(ctx context.Context, message t.Message) error {
 
 	stats, err := b.storage.Stats(ctx)
 	if err != nil {
-		slog.Error("bot: Failed to collect stats", "error", err)
+		logError("bot: Failed to collect stats", err)
 		b.sendMessage(ctx, message.Chat.ID, escapeMarkdownV2("Failed to collect statistics."), &message)
 
 		return nil

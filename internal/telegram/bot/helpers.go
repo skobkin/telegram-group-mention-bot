@@ -18,7 +18,7 @@ import (
 func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, notFound string, operation func(*storage.MentionGroup, *t.Message) error) error {
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, chatID, []string{groupName})
 	if err != nil {
-		slog.Error("bot:helpers: Failed to get group", "error", err, "group_name", groupName, "chat_id", chatID)
+		logError("bot:helpers: Failed to get group", err, "group_name", groupName, "chat_id", chatID)
 		b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to look up the group."), originalMessage)
 
 		return err
@@ -157,7 +157,7 @@ func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessa
 			}
 		}
 		if err != nil {
-			slog.Error("bot:helpers: Failed to send message", "error", err, "chat_id", chatID, "text_length", len(text))
+			logError("bot:helpers: Failed to send message", err, "chat_id", chatID, "text_length", len(text))
 
 			return nil
 		}
@@ -200,7 +200,7 @@ func (b *Bot) sendTyping(ctx context.Context, chatID t.ChatID) {
 	slog.Debug("bot:helpers: Setting 'typing' chat action", "chat_id", chatID)
 	err := b.api.SendChatAction(ctx, tu.ChatAction(chatID, "typing"))
 	if err != nil {
-		slog.Error("bot:helpers: Cannot set chat action", "error", err)
+		slog.Error("bot:helpers: Cannot set chat action", "error", err) // not reported: typing hints are best effort and noisy
 	}
 }
 

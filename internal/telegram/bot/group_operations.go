@@ -36,7 +36,7 @@ func (b *Bot) joinGroup(ctx context.Context, group *storage.MentionGroup, user *
 	// Idempotent insert: the user row is created by middleware (messages) or the callback handler
 	added, err := b.storage.AddMember(ctx, group.ID, &storage.User{ID: user.ID})
 	if err != nil {
-		slog.Error("bot: Failed to add user to group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
+		logError("bot: Failed to add user to group", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
 		return outcome{text: "Failed to join group."}
 	}
@@ -55,7 +55,7 @@ func (b *Bot) leaveGroup(ctx context.Context, group *storage.MentionGroup, userI
 
 	removed, err := b.storage.RemoveMember(ctx, group.ID, userID)
 	if err != nil {
-		slog.Error("bot: Failed to remove user from group", "error", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
+		logError("bot: Failed to remove user from group", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
 		return outcome{text: "Failed to leave group."}
 	}
@@ -77,7 +77,7 @@ func (b *Bot) deleteGroup(ctx context.Context, group *storage.MentionGroup, chat
 	}
 
 	if err := b.storage.DeleteGroup(ctx, group.ID); err != nil {
-		slog.Error("bot: Failed to delete group", "error", err, "group_name", group.Name, "chat_id", chatID)
+		logError("bot: Failed to delete group", err, "group_name", group.Name, "chat_id", chatID)
 
 		return outcome{text: "Failed to delete group."}
 	}
