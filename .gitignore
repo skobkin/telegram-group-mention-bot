@@ -1,2 +1,6 @@
 /.idea
 /*.sqlite
+/.env
+/telegram-group-mention-bot
+/bin/
+/dist/

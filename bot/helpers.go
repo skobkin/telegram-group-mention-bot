@@ -115,8 +115,6 @@ func (b *Bot) createGroupSelectionReplyKeyboard(commandPrefix string, groups []s
 }
 
 func escapeMarkdownV2(text string) string {
-	slog.Debug("bot:helpers: Escaping markdown", "input_text", text)
-
 	var result strings.Builder
 	for _, r := range text {
 		// Only escape non-alphanumeric ASCII characters (codes 1-126)
@@ -126,7 +124,6 @@ func escapeMarkdownV2(text string) string {
 		result.WriteRune(r)
 	}
 
-	slog.Debug("bot:helpers: Markdown escaped", "output_text", result.String())
 	return result.String()
 }
 
@@ -149,7 +146,7 @@ func isValidGroupName(name string) bool {
 }
 
 func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
-	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text", text, "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
+	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text_length", len(text), "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
 
 	message := tu.Message(tu.ID(chatID), text)
 	message.ParseMode = "MarkdownV2"
@@ -193,22 +190,22 @@ func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message,
 
 // AddMember adds a user to a mention group
 func (b *Bot) AddMember(groupID uint, userID int64, username, firstName, lastName string) error {
-	slog.Debug("bot:helpers: Adding member to group", "group_id", groupID, "user_id", userID, "username", username)
+	slog.Debug("bot:helpers: Adding member to group", "group_id", groupID, "user_id", userID)
 
 	// First ensure the user exists in the database
 	user, err := b.storage.CreateOrUpdateUser(userID, username, firstName, lastName)
 	if err != nil {
-		slog.Error("bot:helpers: Failed to create/update user", "error", err, "user_id", userID, "username", username)
+		slog.Error("bot:helpers: Failed to create/update user", "error", err, "user_id", userID)
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
 
 	// Then add them to the group
 	if err := b.storage.AddMember(groupID, user); err != nil {
-		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID, "username", username)
+		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID)
 		return fmt.Errorf("failed to add member: %w", err)
 	}
 
-	slog.Info("bot:helpers: User added to group", "group_id", groupID, "user_id", userID, "username", username)
+	slog.Info("bot:helpers: User added to group", "group_id", groupID, "user_id", userID)
 	return nil
 }
 

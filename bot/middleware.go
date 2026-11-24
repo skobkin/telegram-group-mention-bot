@@ -1,60 +1,43 @@
 package bot
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
+	"runtime/debug"
 	"telegram-group-mention-bot/storage"
 
 	t "github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 )
 
-// logUpdate is a middleware that logs all incoming updates
+// recoverFromPanic logs a recovered handler panic with its stack and lets the update loop continue.
+func recoverFromPanic(recovered any) error {
+	slog.Error("bot:middleware: Recovered from panic in handler", "panic", fmt.Sprint(recovered), "stack", string(debug.Stack()))
+
+	return nil
+}
+
+// logUpdate is a middleware that logs all incoming updates.
+// It never logs message text or user names, only identifiers and sizes.
 func (b *Bot) logUpdate(ctx *th.Context, update t.Update) error {
-	updateType := "unknown"
-	var details string
-	var text string
+	attrs := []any{"update_id", update.UpdateID}
 
 	switch {
 	case update.Message != nil:
-		updateType = "message"
 		msg := update.Message
-		text = msg.Text
-
-		// Determine if we should mask the text based on log level
-		shouldMask := !slog.Default().Enabled(context.Background(), slog.LevelDebug)
-
-		// Only log full text for commands or messages with @ mentions
-		if strings.HasPrefix(text, "/") {
-			// Keep commands as is
-		} else if strings.Contains(text, "@") && shouldMask {
-			// For messages with @ mentions, keep @ and the word after it, mask the rest
-			words := strings.Fields(text)
-			for i, word := range words {
-				if strings.HasPrefix(word, "@") {
-					// Keep this word as is
-					words[i] = word
-				} else {
-					// Mask other words
-					words[i] = strings.Repeat("*", len(word))
-				}
-			}
-			text = strings.Join(words, " ")
-		} else if shouldMask {
-			text = "[redacted]"
+		attrs = append(attrs, "type", "message", "chat_type", msg.Chat.Type, "chat_id", msg.Chat.ID, "text_length", len(msg.Text))
+		if msg.From != nil {
+			attrs = append(attrs, "from_id", msg.From.ID)
 		}
-
-		details = fmt.Sprintf("chat_type: %s, from: %d, chat: %d, text: %q", msg.Chat.Type, msg.From.ID, msg.Chat.ID, text)
 	case update.CallbackQuery != nil:
-		updateType = "callback_query"
-		cb := update.CallbackQuery
-		details = fmt.Sprintf("from: %d, data: %q", cb.From.ID, cb.Data)
+		attrs = append(attrs, "type", "callback_query", "from_id", update.CallbackQuery.From.ID)
+	default:
+		attrs = append(attrs, "type", "other")
 	}
 
-	slog.Info("bot:middleware: Incoming update", "type", updateType, "update_id", update.UpdateID, "details", details)
+	slog.Info("bot:middleware: Incoming update", attrs...)
+
 	return ctx.Next(update)
 }
 
@@ -72,7 +55,7 @@ func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
 		return ctx.Next(update)
 	}
 
-	slog.Debug("bot:middleware: Updating user data", "user_id", from.ID, "username", from.Username, "first_name", from.FirstName, "last_name", from.LastName, "chat_id", msg.Chat.ID, "chat_type", msg.Chat.Type)
+	slog.Debug("bot:middleware: Updating user data", "user_id", from.ID, "chat_id", msg.Chat.ID, "chat_type", msg.Chat.Type)
 
 	// Update user data in the database
 	_, err := b.storage.CreateOrUpdateUser(
@@ -84,7 +67,6 @@ func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
 	if err != nil {
 		slog.Error("bot:middleware: Failed to update user data",
 			"user_id", from.ID,
-			"username", from.Username,
 			"error", err)
 	}
 

@@ -31,7 +31,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 
 ### From source
 
-1. Create a `.env` file with the following variables:
+1. Copy `.env.example` to `.env` (it is git-ignored) and fill in the variables:
    ```
    TELEGRAM_BOT_TOKEN=your_bot_token_here
    DATABASE_PATH=data.sqlite

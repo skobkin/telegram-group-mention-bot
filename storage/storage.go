@@ -193,7 +193,7 @@ func (s *Storage) CreateOrUpdateUser(userID int64, username, firstName, lastName
 		Columns:   []clause.Column{{Name: "id"}},
 		UpdateAll: true,
 	}).Create(&user).Error; err != nil {
-		slog.Error("storage: Failed to create/update user", "error", err, "user_id", userID, "username", username)
+		slog.Error("storage: Failed to create/update user", "error", err, "user_id", userID)
 		return nil, errors.Join(ErrCreate, err)
 	}
 	return &user, nil
@@ -211,7 +211,7 @@ func (s *Storage) AddMember(groupID uint, user *User) error {
 
 	result := s.db.Create(&member)
 	if result.Error != nil {
-		slog.Error("storage: Failed to add member", "error", result.Error, "group_id", groupID, "user_id", user.ID, "username", user.Username)
+		slog.Error("storage: Failed to add member", "error", result.Error, "group_id", groupID, "user_id", user.ID)
 		return errors.Join(ErrCreate, result.Error)
 	}
 	return nil

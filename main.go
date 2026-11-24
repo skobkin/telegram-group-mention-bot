@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"telegram-group-mention-bot/bot"
+	"telegram-group-mention-bot/internal/logging"
 	"telegram-group-mention-bot/storage"
 
 	"github.com/joho/godotenv"
@@ -18,20 +19,21 @@ func main() {
 	veryVerbose := flag.Bool("vv", false, "Enable very verbose logging (LevelDebug)")
 	flag.Parse()
 
-	// Set up logging
-	setLogLevel(*verbose, *veryVerbose)
+	// Load .env first so LOG_LEVEL and the token are known before logging is configured
+	envErr := godotenv.Load()
+
+	// The scrubber guarantees the bot token never reaches the logs
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	setLogLevel(*verbose, *veryVerbose, logging.NewScrubber(token))
 
 	slog.Debug("main: Command-line flags parsed", "verbose", *verbose, "very_verbose", *veryVerbose)
 
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		slog.Warn("main: Failed to load .env file", "error", err)
+	if envErr != nil {
+		slog.Warn("main: Failed to load .env file", "error", envErr)
 	} else {
-		slog.Debug("main: Environment variables loaded from .env file", "env", os.Environ())
+		slog.Debug("main: Environment variables loaded from .env file")
 	}
 
-	// Get configuration from environment
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
 		slog.Error("main: TELEGRAM_BOT_TOKEN environment variable is required")
 		os.Exit(1)
@@ -77,7 +79,7 @@ func main() {
 }
 
 // setLogLevel configures the logging level based on the provided flags and environment variable
-func setLogLevel(verbose, veryVerbose bool) {
+func setLogLevel(verbose, veryVerbose bool, scrubber *logging.Scrubber) {
 	// Determine logging level based on flags and environment variable
 	logLevel := slog.LevelWarn // Default level
 
@@ -105,9 +107,9 @@ func setLogLevel(verbose, veryVerbose bool) {
 	}
 
 	// Configure structured logging with JSON output
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(logging.NewScrubHandler(scrubber, slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: logLevel,
-	}))
+	})))
 	slog.SetDefault(logger)
 
 	slog.Debug("main: Log level set to", "level", logLevel.String())

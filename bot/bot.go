@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"telegram-group-mention-bot/internal/logging"
 	"telegram-group-mention-bot/storage"
 
 	t "github.com/mymmrac/telego"
@@ -27,7 +28,7 @@ func New(token string, storage *storage.Storage) (*Bot, error) {
 	slog.Debug("bot: Creating new bot instance", "token_length", len(token))
 
 	// Create bot with debug logging
-	bot, err := t.NewBot(token, t.WithDefaultLogger(false, true))
+	bot, err := t.NewBot(token, t.WithLogger(logging.TelegoLogger{}))
 	if err != nil {
 		slog.Error("bot: Failed to create bot", "error", err, "token_length", len(token))
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -79,6 +80,7 @@ func (b *Bot) Start() error {
 
 	// Register update middleware for logging
 	slog.Debug("bot: Registering middleware")
+	h.Use(th.PanicRecoveryHandler(recoverFromPanic))
 	h.Use(b.logUpdate)
 	h.Use(b.syncUserData)
 	h.Use(b.addToAllGroup)
