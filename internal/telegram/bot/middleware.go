@@ -58,7 +58,7 @@ func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
 	slog.Debug("bot:middleware: Updating user data", "user_id", from.ID, "chat_id", msg.Chat.ID, "chat_type", msg.Chat.Type)
 
 	// Update user data in the database
-	_, err := b.storage.CreateOrUpdateUser(
+	_, err := b.storage.CreateOrUpdateUser(ctx,
 		from.ID,
 		from.Username,
 		from.FirstName,
@@ -85,7 +85,7 @@ func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
 
 	slog.Info("bot:middleware: Chat migration detected", "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
 
-	err := b.storage.MigrateChatGroups(msg.MigrateFromChatID, msg.MigrateToChatID)
+	err := b.storage.MigrateChatGroups(ctx, msg.MigrateFromChatID, msg.MigrateToChatID)
 	if err != nil {
 		slog.Error("bot:middleware: Failed to migrate chat groups", "error", err, "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
 		return err
@@ -113,7 +113,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	slog.Debug("bot:middleware: Checking for 'all' group", "chat_id", msg.Chat.ID, "user_id", from.ID)
 
 	// Check if "all" group exists in this chat
-	allGroup, err := b.storage.GetGroup(groupNameAll, msg.Chat.ID)
+	allGroup, err := b.storage.GetGroup(ctx, groupNameAll, msg.Chat.ID)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			slog.Debug("bot:middleware: 'all' group not found", "chat_id", msg.Chat.ID)
@@ -125,7 +125,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	}
 
 	// Check if user is already a member of the "all" group
-	isMember, err := b.storage.IsMember(allGroup.ID, from.ID)
+	isMember, err := b.storage.IsMember(ctx, allGroup.ID, from.ID)
 	if err != nil {
 		slog.Error("bot:middleware: Failed to check membership in 'all' group", "error", err, "group_id", allGroup.ID, "user_id", from.ID)
 		return ctx.Next(update)
@@ -144,7 +144,7 @@ func (b *Bot) addToAllGroup(ctx *th.Context, update t.Update) error {
 	}
 
 	// Add user to the "all" group
-	err = b.storage.AddMember(allGroup.ID, newMinimalMember)
+	err = b.storage.AddMember(ctx, allGroup.ID, newMinimalMember)
 	if err != nil {
 		slog.Error("bot:middleware: Failed to add user to 'all' group", "error", err, "group_id", allGroup.ID, "user_id", from.ID)
 	} else {

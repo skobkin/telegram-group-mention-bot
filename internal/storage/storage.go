@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -46,6 +47,16 @@ func New(dbPath string) (*Storage, error) {
 	}
 
 	return s, nil
+}
+
+// Close releases the underlying database connection pool.
+func (s *Storage) Close() error {
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return err
+	}
+
+	return sqlDB.Close()
 }
 
 func (s *Storage) migrate() error {
@@ -131,7 +142,7 @@ func (s *Storage) migrateUserData() error {
 }
 
 // CreateGroup creates a new mention group in a chat
-func (s *Storage) CreateGroup(name string, chatID int64) error {
+func (s *Storage) CreateGroup(ctx context.Context, name string, chatID int64) error {
 	if name == "" {
 		return ErrEmptyGroupName
 	}
@@ -141,7 +152,7 @@ func (s *Storage) CreateGroup(name string, chatID int64) error {
 		ChatID: chatID,
 	}
 
-	result := s.db.Create(&group)
+	result := s.db.WithContext(ctx).Create(&group)
 	if result.Error != nil {
 		slog.Error("storage: Failed to create group", "error", result.Error, "name", name, "chat_id", chatID)
 		return errors.Join(ErrCreate, result.Error)
@@ -150,9 +161,9 @@ func (s *Storage) CreateGroup(name string, chatID int64) error {
 }
 
 // GetGroup retrieves a group by name and chat ID
-func (s *Storage) GetGroup(name string, chatID int64) (*MentionGroup, error) {
+func (s *Storage) GetGroup(ctx context.Context, name string, chatID int64) (*MentionGroup, error) {
 	var group MentionGroup
-	result := s.db.Where("name = ? AND chat_id = ?", name, chatID).First(&group)
+	result := s.db.WithContext(ctx).Where("name = ? AND chat_id = ?", name, chatID).First(&group)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.Join(ErrNotFound, result.Error)
@@ -164,9 +175,9 @@ func (s *Storage) GetGroup(name string, chatID int64) (*MentionGroup, error) {
 }
 
 // GetUser retrieves a user by ID
-func (s *Storage) GetUser(userID int64) (*User, error) {
+func (s *Storage) GetUser(ctx context.Context, userID int64) (*User, error) {
 	var user User
-	result := s.db.First(&user, userID)
+	result := s.db.WithContext(ctx).First(&user, userID)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.Join(ErrNotFound, result.Error)
@@ -178,7 +189,7 @@ func (s *Storage) GetUser(userID int64) (*User, error) {
 }
 
 // CreateOrUpdateUser creates a new user or updates an existing one
-func (s *Storage) CreateOrUpdateUser(userID int64, username, firstName, lastName string) (*User, error) {
+func (s *Storage) CreateOrUpdateUser(ctx context.Context, userID int64, username, firstName, lastName string) (*User, error) {
 	if userID == 0 {
 		return nil, ErrZeroUserID
 	}
@@ -189,7 +200,7 @@ func (s *Storage) CreateOrUpdateUser(userID int64, username, firstName, lastName
 		FirstName: firstName,
 		LastName:  lastName,
 	}
-	if err := s.db.Clauses(clause.OnConflict{
+	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
 		UpdateAll: true,
 	}).Create(&user).Error; err != nil {
@@ -199,7 +210,7 @@ func (s *Storage) CreateOrUpdateUser(userID int64, username, firstName, lastName
 	return &user, nil
 }
 
-func (s *Storage) AddMember(groupID uint, user *User) error {
+func (s *Storage) AddMember(ctx context.Context, groupID uint, user *User) error {
 	if user == nil {
 		return ErrNilUser
 	}
@@ -209,7 +220,7 @@ func (s *Storage) AddMember(groupID uint, user *User) error {
 		UserID:  user.ID,
 	}
 
-	result := s.db.Create(&member)
+	result := s.db.WithContext(ctx).Create(&member)
 	if result.Error != nil {
 		slog.Error("storage: Failed to add member", "error", result.Error, "group_id", groupID, "user_id", user.ID)
 		return errors.Join(ErrCreate, result.Error)
@@ -218,8 +229,8 @@ func (s *Storage) AddMember(groupID uint, user *User) error {
 }
 
 // RemoveMember removes a user from a mention group
-func (s *Storage) RemoveMember(groupID uint, userID int64) error {
-	result := s.db.Where("group_id = ? AND user_id = ?", groupID, userID).Delete(&GroupMember{})
+func (s *Storage) RemoveMember(ctx context.Context, groupID uint, userID int64) error {
+	result := s.db.WithContext(ctx).Where("group_id = ? AND user_id = ?", groupID, userID).Delete(&GroupMember{})
 	if result.Error != nil {
 		slog.Error("storage: Failed to remove member", "error", result.Error,
 			"group_id", groupID, "user_id", userID)
@@ -229,9 +240,9 @@ func (s *Storage) RemoveMember(groupID uint, userID int64) error {
 }
 
 // GetGroupMembers retrieves all members of a group
-func (s *Storage) GetGroupMembers(groupID uint) ([]GroupMember, error) {
+func (s *Storage) GetGroupMembers(ctx context.Context, groupID uint) ([]GroupMember, error) {
 	var members []GroupMember
-	result := s.db.Preload("User").Where("group_id = ?", groupID).Find(&members)
+	result := s.db.WithContext(ctx).Preload("User").Where("group_id = ?", groupID).Find(&members)
 	if result.Error != nil {
 		slog.Error("storage: Failed to get group members", "error", result.Error, "group_id", groupID)
 		return nil, errors.Join(ErrGet, result.Error)
@@ -240,8 +251,8 @@ func (s *Storage) GetGroupMembers(groupID uint) ([]GroupMember, error) {
 }
 
 // DeleteGroup deletes a group by ID
-func (s *Storage) DeleteGroup(groupID uint) error {
-	result := s.db.Delete(&MentionGroup{}, groupID)
+func (s *Storage) DeleteGroup(ctx context.Context, groupID uint) error {
+	result := s.db.WithContext(ctx).Delete(&MentionGroup{}, groupID)
 	if result.Error != nil {
 		slog.Error("storage: Failed to delete group", "error", result.Error, "group_id", groupID)
 		return errors.Join(ErrDelete, result.Error)
@@ -249,9 +260,9 @@ func (s *Storage) DeleteGroup(groupID uint) error {
 	return nil
 }
 
-func (s *Storage) GetGroupsByChat(chatID int64) ([]MentionGroup, error) {
+func (s *Storage) GetGroupsByChat(ctx context.Context, chatID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
-	result := s.db.Where("chat_id = ?", chatID).Find(&groups)
+	result := s.db.WithContext(ctx).Where("chat_id = ?", chatID).Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to get groups", "error", result.Error, "chat_id", chatID)
 		return nil, errors.Join(ErrGet, result.Error)
@@ -260,9 +271,9 @@ func (s *Storage) GetGroupsByChat(chatID int64) ([]MentionGroup, error) {
 }
 
 // IsMember checks if a user is a member of a group
-func (s *Storage) IsMember(groupID uint, userID int64) (bool, error) {
+func (s *Storage) IsMember(ctx context.Context, groupID uint, userID int64) (bool, error) {
 	var count int64
-	result := s.db.Model(&GroupMember{}).Where("group_id = ? AND user_id = ?", groupID, userID).Count(&count)
+	result := s.db.WithContext(ctx).Model(&GroupMember{}).Where("group_id = ? AND user_id = ?", groupID, userID).Count(&count)
 	if result.Error != nil {
 		slog.Error("storage: Failed to check membership", "error", result.Error,
 			"group_id", groupID, "user_id", userID)
@@ -271,9 +282,9 @@ func (s *Storage) IsMember(groupID uint, userID int64) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Storage) GetGroupsToJoinByChatAndUser(chatID int64, userID int64) ([]MentionGroup, error) {
+func (s *Storage) GetGroupsToJoinByChatAndUser(ctx context.Context, chatID int64, userID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
-	result := s.db.Where("chat_id = ? AND id NOT IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
+	result := s.db.WithContext(ctx).Where("chat_id = ? AND id NOT IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to get groups to join", "error", result.Error,
 			"chat_id", chatID, "user_id", userID)
@@ -282,9 +293,9 @@ func (s *Storage) GetGroupsToJoinByChatAndUser(chatID int64, userID int64) ([]Me
 	return groups, nil
 }
 
-func (s *Storage) GetUserGroupsByChat(chatID int64, userID int64) ([]MentionGroup, error) {
+func (s *Storage) GetUserGroupsByChat(ctx context.Context, chatID int64, userID int64) ([]MentionGroup, error) {
 	var groups []MentionGroup
-	result := s.db.Where("chat_id = ? AND id IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
+	result := s.db.WithContext(ctx).Where("chat_id = ? AND id IN (SELECT group_id FROM group_members WHERE user_id = ?)", chatID, userID).Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to get user's groups", "error", result.Error,
 			"chat_id", chatID, "user_id", userID)
@@ -293,13 +304,13 @@ func (s *Storage) GetUserGroupsByChat(chatID int64, userID int64) ([]MentionGrou
 	return groups, nil
 }
 
-func (s *Storage) FindGroupsByChatAndNamesWithMembers(chatID int64, names []string) ([]MentionGroup, error) {
+func (s *Storage) FindGroupsByChatAndNamesWithMembers(ctx context.Context, chatID int64, names []string) ([]MentionGroup, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
 
 	var groups []MentionGroup
-	result := s.db.Where("chat_id = ? AND name IN ?", chatID, names).Preload("Members.User").Find(&groups)
+	result := s.db.WithContext(ctx).Where("chat_id = ? AND name IN ?", chatID, names).Preload("Members.User").Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to find groups", "error", result.Error, "chat_id", chatID, "names", names)
 		return nil, errors.Join(ErrGet, result.Error)
@@ -307,8 +318,8 @@ func (s *Storage) FindGroupsByChatAndNamesWithMembers(chatID int64, names []stri
 	return groups, nil
 }
 
-func (s *Storage) MigrateChatGroups(fromChatID, toChatID int64) error {
-	result := s.db.Model(&MentionGroup{}).Where("chat_id = ?", fromChatID).Update("chat_id", toChatID)
+func (s *Storage) MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error {
+	result := s.db.WithContext(ctx).Model(&MentionGroup{}).Where("chat_id = ?", fromChatID).Update("chat_id", toChatID)
 	if result.Error != nil {
 		slog.Error("storage: Failed to migrate chat groups", "error", result.Error,
 			"from_chat_id", fromChatID, "to_chat_id", toChatID)

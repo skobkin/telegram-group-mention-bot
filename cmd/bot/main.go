@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"telegram-group-mention-bot/internal/buildinfo"
 	"telegram-group-mention-bot/internal/config"
@@ -37,6 +40,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	slog.Info("main: Starting", "app", buildinfo.AppName, "version", buildinfo.Version)
 
 	store, err := storage.New(cfg.DatabasePath)
@@ -51,14 +57,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := b.Start(); err != nil {
-		slog.Error("main: Failed to start bot", "error", err)
+	err = b.Run(ctx)
+	if closeErr := store.Close(); closeErr != nil {
+		slog.Error("main: Failed to close storage", "error", closeErr)
+	}
+
+	if err != nil {
+		slog.Error("main: Bot stopped with error", "error", err)
 		os.Exit(1)
 	}
 
-	slog.Info("main: Bot started successfully")
-
-	select {}
+	slog.Info("main: Shutdown complete")
 }
 
 // setupLogging configures JSON logging. Level precedence: -vv, -v, LOG_LEVEL, default warn.

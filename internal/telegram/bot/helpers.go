@@ -14,19 +14,19 @@ import (
 )
 
 // executeOnGroup executes a function on a group if it exists
-func (b *Bot) executeOnGroup(chatID int64, groupName string, originalMessage *t.Message, operation func(*storage.MentionGroup, *t.Message) error) error {
+func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, operation func(*storage.MentionGroup, *t.Message) error) error {
 	slog.Debug("bot:helpers: Requested operation execution on group", "chat_id", chatID, "group_name", groupName)
 
-	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(chatID, []string{groupName})
+	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, chatID, []string{groupName})
 	if err != nil {
 		slog.Error("bot:helpers: Failed to get group", "error", err,
 			"group_name", groupName, "chat_id", chatID)
-		b.sendMessage(chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Group not found: %v", err)), originalMessage)
 		return err
 	}
 	if len(groups) == 0 {
 		slog.Debug("bot:helpers: Group not found", "group_name", groupName, "chat_id", chatID)
-		b.sendMessage(chatID, escapeMarkdownV2("Group not found."), originalMessage)
+		b.sendMessage(ctx, chatID, escapeMarkdownV2("Group not found."), originalMessage)
 		return storage.ErrNotFound
 	}
 	group := &groups[0]
@@ -145,7 +145,7 @@ func isValidGroupName(name string) bool {
 	return true
 }
 
-func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
+func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, originalMessage *t.Message, replyMarkup ...t.ReplyMarkup) {
 	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text_length", len(text), "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
 
 	message := tu.Message(tu.ID(chatID), text)
@@ -158,7 +158,7 @@ func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message,
 		message = b.reply(*originalMessage, message)
 	}
 
-	_, err := b.bot.SendMessage(context.Background(), message)
+	_, err := b.bot.SendMessage(ctx, message)
 	if err != nil {
 		// Check if it's a rate limit error
 		if strings.Contains(err.Error(), "Too Many Requests") {
@@ -171,7 +171,7 @@ func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message,
 				if _, _ = fmt.Sscanf(parts[1], "%d", &retryAfter); retryAfter > 0 {
 					slog.Info("bot:helpers: Rate limit hit, waiting", "seconds", retryAfter)
 					time.Sleep(time.Duration(retryAfter) * time.Second)
-					_, retryErr := b.bot.SendMessage(context.Background(), message)
+					_, retryErr := b.bot.SendMessage(ctx, message)
 					if retryErr != nil {
 						err = retryErr
 					} else {
@@ -189,18 +189,18 @@ func (b *Bot) sendMessage(chatID int64, text string, originalMessage *t.Message,
 }
 
 // AddMember adds a user to a mention group
-func (b *Bot) AddMember(groupID uint, userID int64, username, firstName, lastName string) error {
+func (b *Bot) AddMember(ctx context.Context, groupID uint, userID int64, username, firstName, lastName string) error {
 	slog.Debug("bot:helpers: Adding member to group", "group_id", groupID, "user_id", userID)
 
 	// First ensure the user exists in the database
-	user, err := b.storage.CreateOrUpdateUser(userID, username, firstName, lastName)
+	user, err := b.storage.CreateOrUpdateUser(ctx, userID, username, firstName, lastName)
 	if err != nil {
 		slog.Error("bot:helpers: Failed to create/update user", "error", err, "user_id", userID)
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
 
 	// Then add them to the group
-	if err := b.storage.AddMember(groupID, user); err != nil {
+	if err := b.storage.AddMember(ctx, groupID, user); err != nil {
 		slog.Error("bot:helpers: Failed to add member", "error", err, "group_id", groupID, "user_id", userID)
 		return fmt.Errorf("failed to add member: %w", err)
 	}
@@ -216,9 +216,9 @@ func (b *Bot) reply(originalMessage t.Message, newMessage *t.SendMessageParams) 
 	})
 }
 
-func (b *Bot) sendTyping(chatID t.ChatID) {
+func (b *Bot) sendTyping(ctx context.Context, chatID t.ChatID) {
 	slog.Debug("bot:helpers: Setting 'typing' chat action", "chat_id", chatID)
-	err := b.bot.SendChatAction(context.Background(), tu.ChatAction(chatID, "typing"))
+	err := b.bot.SendChatAction(ctx, tu.ChatAction(chatID, "typing"))
 	if err != nil {
 		slog.Error("bot:helpers: Cannot set chat action", "error", err)
 	}
