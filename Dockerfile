@@ -7,7 +7,9 @@ RUN apk add --no-cache gcc musl-dev
 
 COPY . .
 
-RUN CGO_ENABLED=1 go build -o app
+ARG VERSION=dev
+
+RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w -X telegram-group-mention-bot/internal/buildinfo.Version=${VERSION}" -o app ./cmd/bot
 
 FROM alpine:latest
 

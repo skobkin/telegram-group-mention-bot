@@ -4,8 +4,9 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"strings"
 
+	"telegram-group-mention-bot/internal/buildinfo"
+	"telegram-group-mention-bot/internal/config"
 	"telegram-group-mention-bot/internal/logging"
 	"telegram-group-mention-bot/internal/storage"
 	"telegram-group-mention-bot/internal/support/secretscrub"
@@ -15,103 +16,70 @@ import (
 )
 
 func main() {
-	// Parse command-line flags
 	verbose := flag.Bool("v", false, "Enable verbose logging (LevelInfo)")
 	veryVerbose := flag.Bool("vv", false, "Enable very verbose logging (LevelDebug)")
 	flag.Parse()
 
-	// Load .env first so LOG_LEVEL and the token are known before logging is configured
+	// .env is optional; real environment variables take precedence over it.
 	envErr := godotenv.Load()
 
-	// The scrubber guarantees the bot token never reaches the logs
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	setLogLevel(*verbose, *veryVerbose, secretscrub.New(secretscrub.TelegramTokenSecrets(token)))
-
-	slog.Debug("main: Command-line flags parsed", "verbose", *verbose, "very_verbose", *veryVerbose)
+	// The scrubber is built before any logging so the token can never be logged.
+	scrubber := secretscrub.New(secretscrub.TelegramTokenSecrets(os.Getenv("TELEGRAM_BOT_TOKEN")))
+	setupLogging(scrubber, *verbose, *veryVerbose)
 
 	if envErr != nil {
 		slog.Warn("main: Failed to load .env file", "error", envErr)
-	} else {
-		slog.Debug("main: Environment variables loaded from .env file")
 	}
 
-	if token == "" {
-		slog.Error("main: TELEGRAM_BOT_TOKEN environment variable is required")
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		slog.Error("main: Invalid configuration", "error", err)
 		os.Exit(1)
 	}
 
-	dbPath := os.Getenv("DATABASE_PATH")
-	if dbPath == "" {
-		dbPath = "data.sqlite"
-		slog.Debug("main: Using default database path", "path", dbPath)
-	} else {
-		slog.Debug("main: Using custom database path", "path", dbPath)
-	}
+	slog.Info("main: Starting", "app", buildinfo.AppName, "version", buildinfo.Version)
 
-	// Initialize storage
-	slog.Debug("main: Initializing storage", "db_path", dbPath)
-	storage, err := storage.New(dbPath)
+	store, err := storage.New(cfg.DatabasePath)
 	if err != nil {
 		slog.Error("main: Failed to initialize storage", "error", err)
 		os.Exit(1)
 	}
-	slog.Debug("main: Storage initialized successfully")
 
-	// Initialize bot
-	slog.Debug("main: Initializing bot")
-	bot, err := bot.New(token, storage)
+	b, err := bot.New(cfg.TelegramToken, store)
 	if err != nil {
 		slog.Error("main: Failed to initialize bot", "error", err)
 		os.Exit(1)
 	}
-	slog.Debug("main: Bot initialized successfully")
 
-	// Start bot
-	slog.Info("main: Starting bot...")
-	if err := bot.Start(); err != nil {
+	if err := b.Start(); err != nil {
 		slog.Error("main: Failed to start bot", "error", err)
 		os.Exit(1)
 	}
+
 	slog.Info("main: Bot started successfully")
 
-	// Wait for interrupt signal
-	slog.Debug("main: Bot is running, waiting for interrupt signal")
 	select {}
 }
 
-// setLogLevel configures the logging level based on the provided flags and environment variable
-func setLogLevel(verbose, veryVerbose bool, scrubber *secretscrub.Scrubber) {
-	// Determine logging level based on flags and environment variable
-	logLevel := slog.LevelWarn // Default level
+// setupLogging configures JSON logging. Level precedence: -vv, -v, LOG_LEVEL, default warn.
+func setupLogging(scrubber *secretscrub.Scrubber, verbose, veryVerbose bool) {
+	level := slog.LevelWarn
 
-	// Check environment variable first
-	if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
-		switch strings.ToLower(envLevel) {
-		case "debug":
-			logLevel = slog.LevelDebug
-		case "info":
-			logLevel = slog.LevelInfo
-		case "warn":
-			logLevel = slog.LevelWarn
-		case "error":
-			logLevel = slog.LevelError
-		default:
-			slog.Warn("main: Invalid LOG_LEVEL value", "value", envLevel)
+	if raw := os.Getenv("LOG_LEVEL"); raw != "" {
+		if parsed, err := config.ParseLogLevel(raw); err == nil {
+			level = parsed
+		} else {
+			defer slog.Warn("main: Ignoring LOG_LEVEL", "error", err)
 		}
 	}
 
-	// Command-line flags take precedence over environment variable
-	if veryVerbose {
-		logLevel = slog.LevelDebug
-	} else if verbose {
-		logLevel = slog.LevelInfo
+	switch {
+	case veryVerbose:
+		level = slog.LevelDebug
+	case verbose:
+		level = slog.LevelInfo
 	}
 
-	// Configure structured logging with JSON output
-	logger := slog.New(logging.NewScrubHandler(scrubber, slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: logLevel,
-	})))
-	slog.SetDefault(logger)
-
-	slog.Debug("main: Log level set to", "level", logLevel.String())
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(logging.NewScrubHandler(scrubber, handler)))
 }

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/goreleaser/goreleaser/v2.20.1/www/docs/static/schema.json
+version: 2
+
+project_name: telegram-group-mention-bot
+
+builds:
+  - id: telegram-group-mention-bot
+    main: ./cmd/bot
+    binary: telegram-group-mention-bot
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X telegram-group-mention-bot/internal/buildinfo.Version={{ .Version }}
+
+archives:
+  - id: telegram-group-mention-bot
+    ids:
+      - telegram-group-mention-bot
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  gitea:
+    owner: "{{ .Env.CI_REPO_OWNER }}"
+    name: "{{ .Env.CI_REPO_NAME }}"
+
+gitea_urls:
+  api: "{{ .Env.CI_FORGE_URL }}/api/v1"
+  download: "{{ .Env.CI_FORGE_URL }}"

@@ -25,6 +25,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 | `/del <name>` | Delete a group (only if it has no members) |
 | `/list` | Show all groups in this chat |
 | `/my` | Show groups you've joined in this chat |
+| `/clear` | Delete all empty groups in this chat |
 | `/help` | Show this help message |
 
 ## Getting Started
@@ -38,7 +39,7 @@ A Telegram bot that allows users to create mention groups and mention all member
    ```
 2. Run the bot:
    ```bash
-   go run main.go
+   go run ./cmd/bot
    ```
 
 ### Using Docker
