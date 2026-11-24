@@ -8,7 +8,7 @@ builds:
     main: ./cmd/bot
     binary: telegram-group-mention-bot
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:

@@ -70,11 +70,11 @@ Note: Command-line flags take precedence over the `LOG_LEVEL` environment variab
 ## Requirements
 
 - Go 1.27 or later (see `go.mod`)
-- SQLite3
+- No C toolchain or SQLite library needed (pure-Go SQLite driver)
 - Telegram Bot Token (get it from [@BotFather](https://t.me/botfather))
 
 ## Dependencies
 
 - [telego](https://github.com/mymmrac/telego) - Telegram Bot API library
-- [gorm](https://gorm.io) - ORM library
+- [gorm](https://gorm.io) - ORM library, with the CGO-free [glebarez/sqlite](https://github.com/glebarez/sqlite) driver
 - [godotenv](https://github.com/joho/godotenv) - Environment variables loader 
