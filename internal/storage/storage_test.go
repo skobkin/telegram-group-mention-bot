@@ -274,3 +274,83 @@ func TestLegacyDatabaseIsMigrated(t *testing.T) {
 		t.Fatalf("add after migration: %v", err)
 	}
 }
+
+func memberIDs(t *testing.T, s *Storage, groupID uint) map[int64]bool {
+	t.Helper()
+
+	members, err := s.GetGroupMembers(context.Background(), groupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make(map[int64]bool)
+	for _, m := range members {
+		ids[m.UserID] = true
+	}
+
+	return ids
+}
+
+func TestMigrateChatGroupsMovesGroups(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	group := mustGroup(t, s, "devs", -1)
+	_, _ = s.AddMember(ctx, group.ID, mustUser(t, s, 10, "alice"))
+
+	if err := s.MigrateChatGroups(ctx, -1, -100); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := s.GetGroup(ctx, "devs", -100)
+	if err != nil || moved.ID != group.ID {
+		t.Fatalf("group should keep its ID under the new chat: %+v err=%v", moved, err)
+	}
+
+	if !memberIDs(t, s, moved.ID)[10] {
+		t.Fatal("members must be preserved")
+	}
+
+	// Idempotent: the second service message is a no-op.
+	if err := s.MigrateChatGroups(ctx, -1, -100); err != nil {
+		t.Fatalf("repeat migration: %v", err)
+	}
+
+	if groups, _ := s.GetGroupsByChat(ctx, -100); len(groups) != 1 {
+		t.Fatalf("expected one group after repeat, got %d", len(groups))
+	}
+}
+
+func TestMigrateChatGroupsMergesNameConflicts(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	old := mustGroup(t, s, "devs", -1)
+	existing := mustGroup(t, s, "devs", -100)
+	mustGroup(t, s, "qa", -1)
+
+	_, _ = s.AddMember(ctx, old.ID, mustUser(t, s, 10, "alice"))
+	_, _ = s.AddMember(ctx, old.ID, mustUser(t, s, 11, "bob"))
+	_, _ = s.AddMember(ctx, existing.ID, mustUser(t, s, 11, "bob"))
+	_, _ = s.AddMember(ctx, existing.ID, mustUser(t, s, 12, "carol"))
+
+	if err := s.MigrateChatGroups(ctx, -1, -100); err != nil {
+		t.Fatalf("merge migration: %v", err)
+	}
+
+	merged, err := s.GetGroup(ctx, "devs", -100)
+	if err != nil || merged.ID != existing.ID {
+		t.Fatalf("the existing target group should survive: %+v err=%v", merged, err)
+	}
+
+	ids := memberIDs(t, s, merged.ID)
+	if len(ids) != 3 || !ids[10] || !ids[11] || !ids[12] {
+		t.Fatalf("members must be merged without duplicates: %v", ids)
+	}
+
+	if _, err := s.GetGroup(ctx, "qa", -100); err != nil {
+		t.Fatalf("non-conflicting group must move: %v", err)
+	}
+
+	if groups, _ := s.GetGroupsByChat(ctx, -1); len(groups) != 0 {
+		t.Fatalf("old chat must be empty, got %+v", groups)
+	}
+}

@@ -84,9 +84,9 @@ func (b *Bot) Run(ctx context.Context) error {
 	h.Use(trackInflight(&inflight))
 	h.Use(th.PanicRecoveryHandler(recoverFromPanic))
 	h.Use(b.logUpdate)
+	h.Use(b.migrateChat) // before the others, so groups already live under the new chat ID
 	h.Use(b.syncUserData)
 	h.Use(b.addToAllGroup)
-	h.Use(b.migrateChat)
 
 	b.registerHandlers(h)
 

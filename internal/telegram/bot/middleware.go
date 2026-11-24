@@ -73,25 +73,38 @@ func (b *Bot) syncUserData(ctx *th.Context, update t.Update) error {
 	return ctx.Next(update)
 }
 
+// chatMigration extracts the old and new chat IDs from a migration service message.
+// Telegram sends two separate service messages when a group is upgraded to a supergroup:
+// migrate_to_chat_id in the old chat and migrate_from_chat_id in the new one.
+func chatMigration(msg *t.Message) (from, to int64, ok bool) {
+	switch {
+	case msg.MigrateToChatID != 0:
+		return msg.Chat.ID, msg.MigrateToChatID, true
+	case msg.MigrateFromChatID != 0:
+		return msg.MigrateFromChatID, msg.Chat.ID, true
+	default:
+		return 0, 0, false
+	}
+}
+
+// migrateChat moves mention groups to the new chat ID when a chat is upgraded to a supergroup.
+// Whichever service message arrives first does the work; the second one is a no-op.
 func (b *Bot) migrateChat(ctx *th.Context, update t.Update) error {
 	if update.Message == nil {
 		return ctx.Next(update)
 	}
 
-	msg := update.Message
-	if msg.MigrateToChatID == 0 || msg.MigrateFromChatID == 0 {
+	from, to, ok := chatMigration(update.Message)
+	if !ok {
 		return ctx.Next(update)
 	}
 
-	slog.Info("bot:middleware: Chat migration detected", "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
+	slog.Info("bot:middleware: Chat migration detected", "from_chat_id", from, "to_chat_id", to)
 
-	err := b.storage.MigrateChatGroups(ctx, msg.MigrateFromChatID, msg.MigrateToChatID)
-	if err != nil {
-		slog.Error("bot:middleware: Failed to migrate chat groups", "error", err, "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
+	if err := b.storage.MigrateChatGroups(ctx, from, to); err != nil {
+		slog.Error("bot:middleware: Failed to migrate chat groups", "error", err, "from_chat_id", from, "to_chat_id", to)
 		return err
 	}
-
-	slog.Info("bot:middleware: Chat groups migrated", "from_chat_id", msg.MigrateFromChatID, "to_chat_id", msg.MigrateToChatID)
 
 	return ctx.Next(update)
 }

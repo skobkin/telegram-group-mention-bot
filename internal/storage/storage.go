@@ -292,13 +292,57 @@ func (s *Storage) FindGroupsByChatAndNamesWithMembers(ctx context.Context, chatI
 	return groups, nil
 }
 
+// MigrateChatGroups moves all groups from one chat ID to another (e.g. when a group is
+// upgraded to a supergroup). It runs in a transaction and is idempotent: with no
+// groups under fromChatID it does nothing. If the target chat already has a group with
+// the same name, the members are merged into it and the source group is removed.
 func (s *Storage) MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error {
-	result := s.db.WithContext(ctx).Model(&MentionGroup{}).Where("chat_id = ?", fromChatID).Update("chat_id", toChatID)
-	if result.Error != nil {
-		slog.Error("storage: Failed to migrate chat groups", "error", result.Error,
-			"from_chat_id", fromChatID, "to_chat_id", toChatID)
-		return errors.Join(ErrUpdate, result.Error)
+	if fromChatID == toChatID {
+		return nil
 	}
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var groups []MentionGroup
+		if err := tx.Where("chat_id = ?", fromChatID).Find(&groups).Error; err != nil {
+			return err
+		}
+
+		for _, group := range groups {
+			var target MentionGroup
+
+			err := tx.Where("chat_id = ? AND name = ?", toChatID, group.Name).First(&target).Error
+
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				if err := tx.Model(&MentionGroup{}).Where("id = ?", group.ID).Update("chat_id", toChatID).Error; err != nil {
+					return err
+				}
+			case err != nil:
+				return err
+			default:
+				// Name conflict: merge members into the existing group, then drop the source
+				if err := tx.Exec(
+					"INSERT OR IGNORE INTO group_members (group_id, user_id) SELECT ?, user_id FROM group_members WHERE group_id = ?",
+					target.ID, group.ID,
+				).Error; err != nil {
+					return err
+				}
+
+				if err := tx.Delete(&MentionGroup{}, group.ID).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		slog.Error("storage: Failed to migrate chat groups", "error", err,
+			"from_chat_id", fromChatID, "to_chat_id", toChatID)
+		return errors.Join(ErrUpdate, err)
+	}
+
 	slog.Info("storage: Migrated chat groups", "from_chat_id", fromChatID, "to_chat_id", toChatID)
+
 	return nil
 }
