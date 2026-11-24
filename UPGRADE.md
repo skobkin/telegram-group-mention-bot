@@ -15,4 +15,7 @@ Operator-facing changes, newest first.
   databases are upgraded automatically on first start (legacy columns removed, orphan member rows cleaned up).
   The bot refuses to start on a database written by a newer version. Back up `data.sqlite` before upgrading.
   SQLite now runs in WAL mode (extra `-wal`/`-shm` files next to the database) with foreign keys enforced.
+- Group names are now case-insensitive and stored lowercased. A migration lowercases existing names and merges
+  groups whose names collide within a chat (members are combined). New `/rename`, `/alias`, `/unalias` commands.
+  A new `group_aliases` table is created automatically.
 - Logs no longer contain message text or user names, and the bot token is scrubbed from all log output.

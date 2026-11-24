@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -353,5 +354,204 @@ func TestMigrateChatGroupsMergesNameConflicts(t *testing.T) {
 
 	if groups, _ := s.GetGroupsByChat(ctx, -1); len(groups) != 0 {
 		t.Fatalf("old chat must be empty, got %+v", groups)
+	}
+}
+
+func TestNamesAreCaseInsensitive(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	if err := s.CreateGroup(ctx, "Devs", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.CreateGroup(ctx, "DEVS", 1); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("duplicate in another case must be rejected, got %v", err)
+	}
+
+	group, err := s.GetGroup(ctx, "dEvS", 1)
+	if err != nil || group.Name != "devs" {
+		t.Fatalf("lookup must be case-insensitive and stored lowercased: %+v err=%v", group, err)
+	}
+
+	found, err := s.FindGroupsByChatAndNamesWithMembers(ctx, 1, []string{"DEVS"})
+	if err != nil || len(found) != 1 {
+		t.Fatalf("find must be case-insensitive: %+v err=%v", found, err)
+	}
+}
+
+func TestRenameGroup(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	group := mustGroup(t, s, "devs", 1)
+	mustGroup(t, s, "qa", 1)
+	mustGroup(t, s, "devs", 2)
+	_, _ = s.AddMember(ctx, group.ID, mustUser(t, s, 10, "alice"))
+
+	if err := s.RenameGroup(ctx, 1, "devs", "QA"); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("rename onto an existing name: %v", err)
+	}
+
+	if err := s.RenameGroup(ctx, 1, "ghosts", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rename of an unknown group: %v", err)
+	}
+
+	if err := s.RenameGroup(ctx, 1, "Devs", "Engineers"); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := s.GetGroup(ctx, "engineers", 1)
+	if err != nil || renamed.ID != group.ID || !memberIDs(t, s, renamed.ID)[10] {
+		t.Fatalf("rename must keep ID and members: %+v err=%v", renamed, err)
+	}
+
+	if _, err := s.GetGroup(ctx, "devs", 2); err != nil {
+		t.Fatalf("other chats must be unaffected: %v", err)
+	}
+}
+
+func TestAliases(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	group := mustGroup(t, s, "developers", 1)
+	mustGroup(t, s, "qa", 1)
+	_, _ = s.AddMember(ctx, group.ID, mustUser(t, s, 10, "alice"))
+
+	if err := s.AddAlias(ctx, 1, "ghosts", "g"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("alias for unknown group: %v", err)
+	}
+
+	if err := s.AddAlias(ctx, 1, "developers", "QA"); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("alias equal to a group name: %v", err)
+	}
+
+	if err := s.AddAlias(ctx, 1, "developers", "Dev"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.AddAlias(ctx, 1, "qa", "dev"); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("alias already taken: %v", err)
+	}
+
+	if err := s.CreateGroup(ctx, "dev", 1); !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("group named like an alias: %v", err)
+	}
+
+	// the same alias can exist in another chat
+	mustGroup(t, s, "developers", 2)
+
+	if err := s.AddAlias(ctx, 2, "developers", "dev"); err != nil {
+		t.Fatalf("aliases are unique per chat only: %v", err)
+	}
+
+	found, err := s.FindGroupsByChatAndNamesWithMembers(ctx, 1, []string{"DEV", "developers"})
+	if err != nil || len(found) != 1 || found[0].ID != group.ID || len(found[0].Members) != 1 {
+		t.Fatalf("alias and name must resolve to one group: %+v err=%v", found, err)
+	}
+
+	aliases, err := s.GetAliasesByChat(ctx, 1)
+	if err != nil || len(aliases[group.ID]) != 1 || aliases[group.ID][0] != "dev" {
+		t.Fatalf("unexpected aliases %v err=%v", aliases, err)
+	}
+
+	if removed, err := s.RemoveAlias(ctx, 1, "DEV"); err != nil || !removed {
+		t.Fatalf("remove alias: %v %v", removed, err)
+	}
+
+	if removed, _ := s.RemoveAlias(ctx, 1, "dev"); removed {
+		t.Fatal("second removal must report false")
+	}
+}
+
+func TestAliasesFollowChatMigrationAndGroupDeletion(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	mustGroup(t, s, "developers", -1)
+	other := mustGroup(t, s, "developers", -100)
+
+	_ = s.AddAlias(ctx, -1, "developers", "dev")
+	_ = s.AddAlias(ctx, -1, "developers", "d")
+	_ = s.AddAlias(ctx, -100, "developers", "dev") // clashes after the merge
+
+	if err := s.MigrateChatGroups(ctx, -1, -100); err != nil {
+		t.Fatal(err)
+	}
+
+	aliases, _ := s.GetAliasesByChat(ctx, -100)
+	if len(aliases[other.ID]) != 2 {
+		t.Fatalf("merged group should own both aliases, got %v", aliases)
+	}
+
+	if old, _ := s.GetAliasesByChat(ctx, -1); len(old) != 0 {
+		t.Fatalf("old chat must have no aliases: %v", old)
+	}
+
+	if err := s.DeleteGroup(ctx, other.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if after, _ := s.GetAliasesByChat(ctx, -100); len(after) != 0 {
+		t.Fatalf("aliases must be deleted with their group: %v", after)
+	}
+}
+
+// v1Schema is the schema as it was after migration 1 (before case-insensitive names).
+const v1Schema = `
+CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT);
+CREATE TABLE mention_groups (id INTEGER PRIMARY KEY, name TEXT, chat_id INTEGER);
+CREATE TABLE group_members (id INTEGER PRIMARY KEY, group_id INTEGER, user_id INTEGER,
+  CONSTRAINT fk_mention_groups_members FOREIGN KEY (group_id) REFERENCES mention_groups(id) ON DELETE CASCADE,
+  CONSTRAINT fk_group_members_user FOREIGN KEY (user_id) REFERENCES users(id));
+CREATE UNIQUE INDEX idx_chat_group ON mention_groups (name, chat_id);
+CREATE UNIQUE INDEX idx_group_user ON group_members (group_id, user_id);
+INSERT INTO users (id, username) VALUES (1, 'a'), (2, 'b'), (3, 'c');
+INSERT INTO mention_groups (id, name, chat_id) VALUES (1, 'Devs', 5), (2, 'devs', 5), (3, 'QA', 5), (4, 'Devs', 6);
+INSERT INTO group_members (group_id, user_id) VALUES (1, 1), (1, 2), (2, 2), (2, 3), (3, 1), (4, 3);
+PRAGMA user_version = 1;
+`
+
+func TestCaseInsensitiveMigrationMergesCollisions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v1.sqlite")
+
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := raw.Exec(v1Schema); err != nil {
+		t.Fatalf("seed v1 schema: %v", err)
+	}
+
+	_ = raw.Close()
+
+	s, err := New(path)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	t.Cleanup(func() { _ = s.Close() })
+
+	ctx := context.Background()
+
+	groups, _ := s.GetGroupsByChat(ctx, 5)
+	if len(groups) != 2 {
+		t.Fatalf("Devs/devs must merge into one group, QA stays: %+v", groups)
+	}
+
+	devs, err := s.GetGroup(ctx, "devs", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ids := memberIDs(t, s, devs.ID); len(ids) != 3 || !ids[1] || !ids[2] || !ids[3] {
+		t.Fatalf("merged members must be the union without duplicates: %v", ids)
+	}
+
+	if _, err := s.GetGroup(ctx, "qa", 5); err != nil {
+		t.Fatalf("QA must be lowercased: %v", err)
+	}
+
+	if _, err := s.GetGroup(ctx, "devs", 6); err != nil {
+		t.Fatalf("other chats are migrated independently: %v", err)
 	}
 }

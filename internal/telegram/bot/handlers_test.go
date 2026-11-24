@@ -159,7 +159,7 @@ func TestNewCommand(tb *testing.T) {
 		tb.Fatalf("group should be stored lowercased: %v", err)
 	}
 
-	contains(tb, h.run(alice, "/new devs"), "Failed to create group")
+	contains(tb, h.run(alice, "/new DEVS"), "already used")
 	contains(tb, h.run(alice, "/new bad_name"), "Invalid group name")
 	contains(tb, h.run(alice, "/new"), "Usage")
 }
@@ -343,4 +343,72 @@ func TestFreeFormMention(tb *testing.T) {
 
 	send("hey @devs, look!")
 	contains(tb, h.api.last(tb), "@alice")
+}
+
+func TestCommandsAreCaseInsensitive(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs")
+
+	contains(tb, h.run(alice, "/join Devs"), "You have joined")
+	contains(tb, h.run(alice, "/m DEVS"), "@alice")
+	contains(tb, h.run(alice, "/show dEvS"), "Members of group")
+
+	if err := h.bot.handleFreeFormMessage(context.Background(), h.msg(alice, "ping @DEVS now")); err != nil {
+		tb.Fatal(err)
+	}
+
+	contains(tb, h.api.last(tb), "@alice")
+}
+
+func TestRenameCommand(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs", 1)
+	h.group("qa")
+	h.group("all")
+
+	contains(tb, h.run(alice, "/rename"), "Usage")
+	contains(tb, h.run(alice, "/rename devs qa"), "already used")
+	contains(tb, h.run(alice, "/rename ghosts x"), "not found")
+	contains(tb, h.run(alice, "/rename devs bad_name"), "Invalid group name")
+	contains(tb, h.run(alice, "/rename all everyone"), "cannot be renamed")
+	contains(tb, h.run(alice, "/rename devs all"), "cannot be renamed")
+	contains(tb, h.run(alice, "/rename Devs Engineers"), "renamed to 'engineers'")
+
+	// members are kept
+	contains(tb, h.run(alice, "/m engineers"), "@alice")
+	contains(tb, h.run(alice, "/m devs"), "not found")
+}
+
+func TestAliasCommands(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("developers", 1)
+	h.group("qa")
+
+	contains(tb, h.run(alice, "/alias developers"), "Usage")
+	contains(tb, h.run(alice, "/alias ghosts g"), "Group 'ghosts' not found")
+	contains(tb, h.run(alice, "/alias developers bad_alias"), "Invalid alias")
+	contains(tb, h.run(alice, "/alias developers all"), "reserved")
+	contains(tb, h.run(alice, "/alias developers qa"), "already used")
+	contains(tb, h.run(alice, "/alias Developers Dev"), "Alias 'dev' added")
+	contains(tb, h.run(alice, "/alias developers dev"), "already used")
+	contains(tb, h.run(alice, "/new dev"), "already used")
+
+	// the alias mentions the group, both as a command and free-form
+	contains(tb, h.run(alice, "/m dev"), "@alice")
+
+	if err := h.bot.handleFreeFormMessage(context.Background(), h.msg(alice, "hey @dev")); err != nil {
+		tb.Fatal(err)
+	}
+
+	contains(tb, h.api.last(tb), "@alice")
+
+	list := h.run(alice, "/list")
+	contains(tb, list, "developers (aliases: dev)")
+
+	contains(tb, h.run(alice, "/unalias DEV"), "removed")
+	contains(tb, h.run(alice, "/unalias dev"), "not found")
+	contains(tb, h.run(alice, "/m dev"), "not found")
 }

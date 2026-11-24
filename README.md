@@ -12,6 +12,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 - Support for users with and without usernames
 - List group members without mentioning them
 - Delete empty groups
+- Case-insensitive group names, plus aliases and renaming
 
 ## Commands
 
@@ -26,6 +27,9 @@ A Telegram bot that allows users to create mention groups and mention all member
 | `/list` | Show all groups in this chat |
 | `/my` | Show groups you've joined in this chat |
 | `/clear` | Delete all empty groups in this chat |
+| `/rename <old> <new>` | Rename a group, keeping its members |
+| `/alias <group> <alias>` | Add a short alias for a group (usable in `/m` and as `@alias`) |
+| `/unalias <alias>` | Remove an alias |
 | `/help` | Show this help message |
 
 ## Getting Started

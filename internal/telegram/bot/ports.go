@@ -28,5 +28,9 @@ type Store interface {
 	GetGroupsToJoinByChatAndUser(ctx context.Context, chatID int64, userID int64) ([]storage.MentionGroup, error)
 	GetUserGroupsByChat(ctx context.Context, chatID int64, userID int64) ([]storage.MentionGroup, error)
 	FindGroupsByChatAndNamesWithMembers(ctx context.Context, chatID int64, names []string) ([]storage.MentionGroup, error)
+	RenameGroup(ctx context.Context, chatID int64, oldName, newName string) error
+	AddAlias(ctx context.Context, chatID int64, groupName, alias string) error
+	RemoveAlias(ctx context.Context, chatID int64, alias string) (bool, error)
+	GetAliasesByChat(ctx context.Context, chatID int64) (map[uint][]string, error)
 	MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	gormlogger "gorm.io/gorm/logger"
 
 	"telegram-group-mention-bot/internal/storage/migrations"
 )
@@ -18,6 +19,9 @@ var (
 	ErrEmptyGroupName = errors.New("group name cannot be empty")
 	ErrZeroUserID     = errors.New("user ID cannot be zero")
 	ErrNilUser        = errors.New("user cannot be nil")
+
+	// ErrAlreadyExists means a group name or alias is already taken in the chat.
+	ErrAlreadyExists = errors.New("already exists")
 
 	// Operation errors
 	ErrNotFound = errors.New("not found")
@@ -47,7 +51,11 @@ func (s *Storage) Close() error {
 
 // New opens (and migrates) the SQLite database at dbPath.
 func New(dbPath string) (*Storage, error) {
-	db, err := gorm.Open(sqlite.Open(dsn(dbPath)), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dsn(dbPath)), &gorm.Config{
+		// GORM's own logger prints "record not found" noise and inlines query values to stdout;
+		// storage methods log their real errors through slog instead.
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
 	if err != nil {
 		slog.Error("storage: Failed to connect to database", "error", err, "path", dbPath)
 
@@ -83,20 +91,31 @@ func dsn(path string) string {
 
 // CreateGroup creates a new mention group in a chat
 func (s *Storage) CreateGroup(ctx context.Context, name string, chatID int64) error {
+	name = NormalizeName(name)
 	if name == "" {
 		return ErrEmptyGroupName
 	}
 
-	group := MentionGroup{
-		Name:   name,
-		ChatID: chatID,
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		taken, err := nameTaken(tx, chatID, name)
+		if err != nil {
+			return err
+		}
+
+		if taken {
+			return ErrAlreadyExists
+		}
+
+		return tx.Create(&MentionGroup{Name: name, ChatID: chatID}).Error
+	})
+	if errors.Is(err, ErrAlreadyExists) {
+		return err
 	}
 
-	result := s.db.WithContext(ctx).Create(&group)
-	if result.Error != nil {
-		slog.Error("storage: Failed to create group", "error", result.Error, "name", name, "chat_id", chatID)
+	if err != nil {
+		slog.Error("storage: Failed to create group", "error", err, "name", name, "chat_id", chatID)
 
-		return errors.Join(ErrCreate, result.Error)
+		return errors.Join(ErrCreate, err)
 	}
 
 	return nil
@@ -104,6 +123,8 @@ func (s *Storage) CreateGroup(ctx context.Context, name string, chatID int64) er
 
 // GetGroup retrieves a group by name and chat ID
 func (s *Storage) GetGroup(ctx context.Context, name string, chatID int64) (*MentionGroup, error) {
+	name = NormalizeName(name)
+
 	var group MentionGroup
 	result := s.db.WithContext(ctx).Where("name = ? AND chat_id = ?", name, chatID).First(&group)
 	if result.Error != nil {
@@ -307,8 +328,17 @@ func (s *Storage) FindGroupsByChatAndNamesWithMembers(ctx context.Context, chatI
 		return nil, nil
 	}
 
+	normalized := make([]string, len(names))
+	for i, name := range names {
+		normalized[i] = NormalizeName(name)
+	}
+
+	// Names match group names or aliases of the chat (case-insensitively, as everything is stored lowercased)
 	var groups []MentionGroup
-	result := s.db.WithContext(ctx).Where("chat_id = ? AND name IN ?", chatID, names).Preload("Members.User").Find(&groups)
+	result := s.db.WithContext(ctx).
+		Where("chat_id = ? AND (name IN ? OR id IN (SELECT group_id FROM group_aliases WHERE chat_id = ? AND alias IN ?))",
+			chatID, normalized, chatID, normalized).
+		Preload("Members.User").Find(&groups)
 	if result.Error != nil {
 		slog.Error("storage: Failed to find groups", "error", result.Error, "chat_id", chatID, "names", names)
 
@@ -343,6 +373,10 @@ func (s *Storage) MigrateChatGroups(ctx context.Context, fromChatID, toChatID in
 				if err := tx.Model(&MentionGroup{}).Where("id = ?", group.ID).Update("chat_id", toChatID).Error; err != nil {
 					return err
 				}
+
+				if err := tx.Model(&GroupAlias{}).Where("group_id = ?", group.ID).Update("chat_id", toChatID).Error; err != nil {
+					return err
+				}
 			case err != nil:
 				return err
 			default:
@@ -350,6 +384,14 @@ func (s *Storage) MigrateChatGroups(ctx context.Context, fromChatID, toChatID in
 				if err := tx.Exec(
 					"INSERT OR IGNORE INTO group_members (group_id, user_id) SELECT ?, user_id FROM group_members WHERE group_id = ?",
 					target.ID, group.ID,
+				).Error; err != nil {
+					return err
+				}
+
+				// Aliases follow the merged group; those that now clash are dropped with the source group
+				if err := tx.Exec(
+					"UPDATE OR IGNORE group_aliases SET group_id = ?, chat_id = ? WHERE group_id = ?",
+					target.ID, toChatID, group.ID,
 				).Error; err != nil {
 					return err
 				}

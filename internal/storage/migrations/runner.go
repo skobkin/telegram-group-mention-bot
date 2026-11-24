@@ -19,6 +19,7 @@ type step struct {
 // steps is ordered by version. Append new migrations at the end; never edit applied ones.
 var steps = []step{
 	{version: 1, name: "baseline", apply: baseline},
+	{version: 2, name: "case_insensitive_names_and_aliases", apply: caseInsensitiveNamesAndAliases},
 }
 
 // TargetVersion is the schema version produced by the latest migration.

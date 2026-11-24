@@ -21,3 +21,12 @@ type GroupMember struct {
 	User         User         `gorm:"foreignKey:UserID;references:ID"`
 	MentionGroup MentionGroup `gorm:"foreignKey:GroupID;references:ID"`
 }
+
+// GroupAlias is an additional short name for a group. Aliases are unique per chat and
+// never collide with group names.
+type GroupAlias struct {
+	ID      uint   `gorm:"primarykey"`
+	ChatID  int64  `gorm:"uniqueIndex:idx_chat_alias"`
+	Alias   string `gorm:"uniqueIndex:idx_chat_alias"`
+	GroupID uint
+}
