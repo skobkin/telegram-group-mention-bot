@@ -12,6 +12,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 - Support for users with and without usernames
 - List group members without mentioning them
 - Delete empty groups
+- Mention posts can carry a message, reply to the message you replied to, stay in their forum topic and never show link previews; long `/show` lists collapse into an expandable quote
 - Quiet by default: successful `/new`, `/join`, `/leave`, `/del` are acknowledged with a 👍 reaction (text reply if reactions are unavailable); optional auto-deletion of service replies
 - Commands are registered in Telegram's command menu (private chats and groups)
 - Anti-spam: per-group and per-user mention cooldowns (chat admins are exempt) and an optional cap on pinged members
@@ -25,12 +26,12 @@ A Telegram bot that allows users to create mention groups and mention all member
 | `/new <name>` | Create a new mention group |
 | `/join <name>` | Join an existing mention group |
 | `/leave <name>` | Leave a mention group |
-| `/mention <name>`, `/m <name>`, `/call <name>` | Mention all members of a group |
+| `/mention <name> [text]`, `/m <name> [text]`, `/call <name> [text]` | Mention all members of a group; the optional text is shown in the post. As a reply to another message, the post replies to that message |
 | `/show <name>` | Show all members of a group without mentioning them |
 | `/del <name>` | Delete a group (only if it has no members) |
 | `/del <name> force` | Chat admins: delete a group together with its members (asks for confirmation) |
 | `/add <group>`, `/remove <group>` | Chat admins: add/remove the user you reply to (or `@mention`) |
-| `/list` | Show all groups in this chat |
+| `/list` | Show all groups in this chat with member counts |
 | `/my` | Show groups you've joined in this chat |
 | `/clear` | Delete all empty groups in this chat |
 | `/rename <old> <new>` | Rename a group, keeping its members |

@@ -87,24 +87,53 @@ func (b *Bot) deleteGroup(ctx context.Context, group *storage.MentionGroup, chat
 	return outcome{text: fmt.Sprintf("Group '%s' has been deleted!", group.Name), ok: true}
 }
 
+// expandableMembersThreshold is the member count above which /show hides the list in an
+// expandable blockquote.
+const expandableMembersThreshold = 10
+
 func (b *Bot) showGroupMembers(group *storage.MentionGroup) outcome {
 	if len(group.Members) == 0 {
 		return outcome{text: fmt.Sprintf("Group '%s' has no members.", group.Name)}
 	}
 
+	header := escapeMarkdownV2(fmt.Sprintf("Members of group '%s' (%d):", group.Name, len(group.Members)))
 	memberList := b.formatMemberList(group.Members)
-	header := fmt.Sprintf("Members of group '%s':\n", group.Name)
 
-	return outcome{text: escapeMarkdownV2(header + strings.Join(memberList, "\n")), md: true}
+	if len(memberList) <= expandableMembersThreshold {
+		return outcome{text: header + "\n" + escapeMarkdownV2(strings.Join(memberList, "\n")), md: true}
+	}
+
+	return outcome{text: header + "\n" + expandableBlockquote(memberList), md: true}
+}
+
+// expandableBlockquote renders lines as a MarkdownV2 expandable blockquote.
+func expandableBlockquote(lines []string) string {
+	var sb strings.Builder
+
+	for i, line := range lines {
+		switch {
+		case i == 0:
+			sb.WriteString("**>")
+		default:
+			sb.WriteString("\n>")
+		}
+
+		sb.WriteString(escapeMarkdownV2(line))
+	}
+
+	sb.WriteString("||")
+
+	return sb.String()
 }
 
 // anonymousAdminBotID is the user ID Telegram shows for messages sent by anonymous group admins.
 const anonymousAdminBotID int64 = 1087968824
 
 // mentionGroups posts one mention message for the groups on behalf of actor. originalMessage
-// (may be nil) is the message the post replies to and whose forum topic it stays in.
+// (may be nil) is the message the post replies to and whose forum topic it stays in; note is
+// optional text from the command that is shown below the header.
 // Cooldowns and the member cap apply here, so commands, buttons and free-form mentions share them.
-func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message, actor *t.User) error {
+func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message, actor *t.User, note string) error {
 	slog.Debug("bot: Mentioning groups", "chat_id", chatID, "group_count", len(groups))
 
 	var withMembers []storage.MentionGroup
@@ -159,7 +188,12 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	}
 
 	header := fmt.Sprintf("⚠️ %s ⚠️", escapeMarkdownV2(strings.Join(groupNames, ", ")))
-	finalText := header + "\n\n" + strings.Join(groupLines, "\n")
+	finalText := header + "\n\n"
+	if note != "" {
+		finalText += escapeMarkdownV2(note) + "\n\n"
+	}
+
+	finalText += strings.Join(groupLines, "\n")
 
 	if skipped > 0 {
 		finalText += "\n\n" + escapeMarkdownV2(fmt.Sprintf("…and %d more not pinged (limit: %d per post).", skipped, b.maxMentions))

@@ -4,6 +4,8 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- Bot messages no longer generate link previews, `/list` and `/my` show member counts, and long `/show` lists use an expandable quote
+  (needs a Telegram client that supports expandable blockquotes; older clients show a plain quote).
 - Successful `/new`, `/join`, `/leave`, `/del` are now acknowledged with a 👍 reaction instead of a text reply (text fallback when the chat
   does not allow reactions). Errors and informational replies stay text.
 - The bot registers its commands with `setMyCommands` at startup (private chats and groups, only when the list changed).

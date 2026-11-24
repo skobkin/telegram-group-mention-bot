@@ -55,7 +55,7 @@ func TestFormatMentions(t *testing.T) {
 	b := &Bot{}
 
 	got := b.formatMentions(members())
-	want := []string{`@alice`, `[Bob\_the Builder](tg://user?id=2)`}
+	want := []string{`@alice`, `[Bob\_the\ Builder](tg://user?id=2)`}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("formatMentions = %v, want %v", got, want)
@@ -127,5 +127,48 @@ func TestHelpListsEveryCommand(t *testing.T) {
 		if cmd.handler == nil {
 			t.Errorf("command %v has no handler", cmd.names)
 		}
+	}
+}
+
+func TestDisplayNamesHaveNoStraySpaces(t *testing.T) {
+	b := &Bot{}
+	list := b.formatMemberList([]storage.GroupMember{
+		{User: storage.User{FirstName: "Carol"}},
+		{User: storage.User{FirstName: "Dan", Username: "dan"}},
+		{User: storage.User{}},
+	})
+
+	want := []string{"Carol", "Dan (dan)", "user"}
+	if !reflect.DeepEqual(list, want) {
+		t.Fatalf("got %q, want %q", list, want)
+	}
+
+	mention := b.formatMentions([]storage.GroupMember{{UserID: 5, User: storage.User{FirstName: "Carol"}}})
+	if mention[0] != `[Carol](tg://user?id=5)` {
+		t.Fatalf("got %q", mention[0])
+	}
+}
+
+func TestRestAfterFields(t *testing.T) {
+	cases := map[string]string{
+		"/m devs":                   "",
+		"/m devs please review":     "please review",
+		"/m  devs \n  two\nlines  ": "two\nlines",
+		"/m":                        "",
+	}
+
+	for in, want := range cases {
+		if got := restAfterFields(in, 2); got != want {
+			t.Errorf("restAfterFields(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestExpandableBlockquote(t *testing.T) {
+	got := expandableBlockquote([]string{"a.b", "c", "d"})
+	want := "**>a\\.b\n>c\n>d||"
+
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

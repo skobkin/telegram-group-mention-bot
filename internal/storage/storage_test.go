@@ -583,3 +583,35 @@ func TestStats(t *testing.T) {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
 }
+
+func TestGetGroupMemberCounts(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	for _, u := range []int64{1, 2} {
+		if _, err := s.CreateOrUpdateUser(ctx, u, "u", "U", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_ = s.CreateGroup(ctx, "a", 10)
+	_ = s.CreateGroup(ctx, "b", 10)
+	_ = s.CreateGroup(ctx, "a", 20)
+
+	a, _ := s.GetGroup(ctx, "a", 10)
+	b, _ := s.GetGroup(ctx, "b", 10)
+	other, _ := s.GetGroup(ctx, "a", 20)
+
+	_, _ = s.AddMember(ctx, a.ID, &User{ID: 1})
+	_, _ = s.AddMember(ctx, a.ID, &User{ID: 2})
+	_, _ = s.AddMember(ctx, other.ID, &User{ID: 1})
+
+	counts, err := s.GetGroupMemberCounts(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if counts[a.ID] != 2 || counts[b.ID] != 0 || len(counts) != 1 {
+		t.Fatalf("counts must only cover non-empty groups of the chat: %v", counts)
+	}
+}

@@ -506,7 +506,8 @@ func TestAliasCommands(tb *testing.T) {
 	contains(tb, h.api.last(tb), "@alice")
 
 	list := h.run(alice, "/list")
-	contains(tb, list, "developers (aliases: dev)")
+	contains(tb, list, "developers (1 member; aliases: dev)")
+	contains(tb, list, "qa (0 members)")
 
 	contains(tb, h.run(alice, "/unalias DEV"), "removed")
 	contains(tb, h.run(alice, "/unalias dev"), "not found")
@@ -532,4 +533,155 @@ func (h *harness) run2(from *t.User, text string) {
 	}
 
 	h.t.Fatalf("unknown command %q", name)
+}
+
+func TestMentionWithText(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs", 1)
+
+	post := h.run(alice, "/m devs please review my_pr (#12)")
+	contains(tb, post, "please review my_pr (#12)")
+	contains(tb, post, "@alice")
+
+	text := plain(post.Text)
+	if strings.Index(text, "please review") > strings.Index(text, "devs: @alice") {
+		tb.Fatalf("the note belongs below the header and above the member lines: %q", text)
+	}
+
+	// no note, no empty paragraph
+	if strings.Contains(plain(h.run(alice, "/m devs").Text), "\n\n\n") {
+		tb.Fatal("unexpected blank paragraph")
+	}
+}
+
+func TestMentionRepliesToTargetMessage(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs", 1)
+
+	msg := h.msg(alice, "/m devs")
+	msg.ReplyToMessage = &t.Message{MessageID: 7, Chat: msg.Chat}
+
+	for _, cmd := range h.bot.commands() {
+		if cmd.names[0] == "mention" {
+			_ = cmd.handler(context.Background(), msg)
+		}
+	}
+
+	if got := h.api.last(tb).ReplyParameters; got == nil || got.MessageID != 7 {
+		tb.Fatalf("mention must reply to the replied-to message, got %+v", got)
+	}
+
+	// without a reply target it answers the command itself
+	if got := h.run(alice, "/m devs").ReplyParameters; got == nil || got.MessageID != 42 {
+		tb.Fatalf("expected reply to the command, got %+v", got)
+	}
+
+	// free-form mentions answer the user's message
+	if err := h.bot.handleFreeFormMessage(context.Background(), h.msg(alice, "ping @devs")); err != nil {
+		tb.Fatal(err)
+	}
+
+	if got := h.api.last(tb).ReplyParameters; got == nil || got.MessageID != 42 {
+		tb.Fatalf("free-form mention must reply to the message, got %+v", got)
+	}
+}
+
+func TestTopicCreationReplyIsNotAReplyTarget(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs", 1)
+
+	msg := h.msg(alice, "/m devs")
+	msg.IsTopicMessage = true
+	msg.MessageThreadID = 555
+	msg.ReplyToMessage = &t.Message{MessageID: 555, ForumTopicCreated: &t.ForumTopicCreated{Name: "x"}}
+
+	for _, cmd := range h.bot.commands() {
+		if cmd.names[0] == "mention" {
+			_ = cmd.handler(context.Background(), msg)
+		}
+	}
+
+	post := h.api.last(tb)
+	if post.ReplyParameters == nil || post.ReplyParameters.MessageID != 42 {
+		tb.Fatalf("must reply to the command, got %+v", post.ReplyParameters)
+	}
+
+	if post.MessageThreadID != 555 {
+		tb.Fatalf("must stay in topic 555, got %d", post.MessageThreadID)
+	}
+}
+
+func TestThreadIDOnlyInRealTopics(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+
+	// a reply chain in a normal supergroup has a thread ID but is no forum topic
+	msg := h.msg(alice, "/list")
+	msg.MessageThreadID = 99
+
+	for _, cmd := range h.bot.commands() {
+		if cmd.names[0] == "list" {
+			_ = cmd.handler(context.Background(), msg)
+		}
+	}
+
+	if got := h.api.last(tb).MessageThreadID; got != 0 {
+		tb.Fatalf("non-topic messages must not get message_thread_id, got %d", got)
+	}
+
+	// in a forum topic, every kind of answer carries the thread
+	msg.IsTopicMessage = true
+
+	for _, text := range []string{"/list", "/my", "/join", "/help", "/new bad_name"} {
+		msg.Text = text
+		name := strings.TrimPrefix(strings.Fields(text)[0], "/")
+
+		for _, cmd := range h.bot.commands() {
+			if cmd.names[0] == name {
+				_ = cmd.handler(context.Background(), msg)
+			}
+		}
+
+		if got := h.api.last(tb).MessageThreadID; got != 99 {
+			tb.Fatalf("%s: expected thread 99, got %d", text, got)
+		}
+	}
+}
+
+func TestLinkPreviewsAreDisabled(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+	h.group("devs", 1)
+
+	for _, text := range []string{"/list", "/m devs https://example.com"} {
+		if lp := h.run(alice, text).LinkPreviewOptions; lp == nil || !lp.IsDisabled {
+			tb.Fatalf("%s: link preview must be disabled", text)
+		}
+	}
+}
+
+func TestShowUsesExpandableBlockquoteForLongLists(tb *testing.T) {
+	h := newHarness(tb)
+	alice := h.user(1, "alice", "Alice")
+
+	ids := []int64{1}
+	for i := int64(2); i <= 12; i++ {
+		h.user(i, "", "User"+string(rune('A'+i)))
+		ids = append(ids, i)
+	}
+
+	h.group("big", ids...)
+	h.group("small", 1)
+
+	big := h.run(alice, "/show big").Text
+	if !strings.Contains(big, "**>") || !strings.HasSuffix(big, "||") || !strings.Contains(plain(big), "(12)") {
+		tb.Fatalf("long list must be an expandable blockquote: %q", big)
+	}
+
+	if strings.Contains(h.run(alice, "/show small").Text, "**>") {
+		tb.Fatal("short lists are plain")
+	}
 }

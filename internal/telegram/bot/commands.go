@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode"
 
 	"telegram-group-mention-bot/internal/storage"
 
@@ -41,35 +42,36 @@ type groupAction struct {
 	verb     string // used in "Select a group to <verb>." and "No groups available to <verb>."
 	source   groupSource
 	notFound string // reply when the named group does not exist; %s is the name
-	// run performs the action for actor. origin (may be nil) is the message a post should reply to.
-	run func(ctx context.Context, group *storage.MentionGroup, actor *t.User, origin *t.Message) outcome
+	// run performs the action for actor. origin (may be nil) is the message a post should reply to;
+	// rest is the text after the group name in the command (empty for buttons).
+	run func(ctx context.Context, group *storage.MentionGroup, actor *t.User, origin *t.Message, rest string) outcome
 }
 
 // groupActions returns the actions that take a group, keyed by name (also the callback action).
 func (b *Bot) groupActions() map[string]groupAction {
 	actions := []groupAction{
 		{key: "join", verb: "join", source: sourceJoinable,
-			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message) outcome {
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message, _ string) outcome {
 				return b.joinGroup(ctx, g, actor, g.ChatID)
 			}},
 		{key: "leave", verb: "leave", source: sourceMine,
-			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message) outcome {
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, _ *t.Message, _ string) outcome {
 				return b.leaveGroup(ctx, g, actor.ID, g.ChatID)
 			}},
 		{key: "m", verb: "mention", source: sourceAll, notFound: "Group '%s' not found.",
-			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, origin *t.Message) outcome {
-				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, origin, actor); err != nil {
+			run: func(ctx context.Context, g *storage.MentionGroup, actor *t.User, origin *t.Message, rest string) outcome {
+				if err := b.mentionGroups(ctx, []storage.MentionGroup{*g}, g.ChatID, replyTarget(origin), actor, rest); err != nil {
 					slog.Error("bot: Failed to mention group", "error", err, "chat_id", g.ChatID)
 				}
 
 				return outcome{silent: true}
 			}},
 		{key: "del", verb: "delete", source: sourceAll,
-			run: func(ctx context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message) outcome {
+			run: func(ctx context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message, _ string) outcome {
 				return b.deleteGroup(ctx, g, g.ChatID)
 			}},
 		{key: "show", verb: "show", source: sourceAll,
-			run: func(_ context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message) outcome {
+			run: func(_ context.Context, g *storage.MentionGroup, _ *t.User, _ *t.Message, _ string) outcome {
 				return b.showGroupMembers(g)
 			}},
 	}
@@ -101,7 +103,7 @@ func (b *Bot) commands() []command {
 		{names: []string{"new"}, usage: "/new <name>", help: "Create a mention group (lowercase letters, numbers, dashes)", handler: b.handleNewGroup},
 		{names: []string{"join"}, usage: "/join [<name>]", help: "Join a group or pick one from the keyboard", handler: join},
 		{names: []string{"leave"}, usage: "/leave [<name>]", help: "Leave a group you are in", handler: leave},
-		{names: []string{"mention", "m", "call"}, usage: "/mention <name> or /m <name> or /call <name>", help: "Mention everyone in a group", handler: mention, menu: []string{"mention", "call"}},
+		{names: []string{"mention", "m", "call"}, usage: "/mention <name> [text] or /m <name> [text] or /call <name> [text]", help: "Mention everyone in a group, optionally with a message", handler: mention, menu: []string{"mention", "call"}},
 		{names: []string{"show"}, usage: "/show <name>", help: "List members without pinging them", handler: show},
 		{names: []string{"del"}, usage: "/del <name> [force]", help: "Delete a group (when it is empty; admins can add \"force\" to delete a group with members)", handler: del},
 		{names: []string{"list"}, usage: "/list", help: "Show all groups in this chat", handler: b.handleList},
@@ -165,7 +167,7 @@ func (b *Bot) groupCommand(action groupAction) commandHandler {
 
 		return b.executeOnGroup(ctx, message.Chat.ID, groupName, &message, action.notFound,
 			func(group *storage.MentionGroup, original *t.Message) error {
-				out := action.run(ctx, group, message.From, original)
+				out := action.run(ctx, group, message.From, original, restAfterFields(message.Text, 2))
 				if !out.silent {
 					b.respond(ctx, original, out)
 				}
@@ -173,6 +175,24 @@ func (b *Bot) groupCommand(action groupAction) commandHandler {
 				return nil
 			})
 	}
+}
+
+// restAfterFields returns the text after the first n whitespace-separated fields, trimmed.
+func restAfterFields(text string, n int) string {
+	rest := text
+
+	for range n {
+		rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+
+		end := strings.IndexFunc(rest, unicode.IsSpace)
+		if end < 0 {
+			return ""
+		}
+
+		rest = rest[end:]
+	}
+
+	return strings.TrimSpace(rest)
 }
 
 func (b *Bot) groupsFor(ctx context.Context, chatID, userID int64, source groupSource) ([]storage.MentionGroup, error) {
@@ -275,7 +295,9 @@ func (b *Bot) handleList(ctx context.Context, message t.Message) error {
 		slog.Error("bot: Failed to get aliases", "error", err, "chat_id", message.Chat.ID)
 	}
 
-	b.sendMessage(ctx, message.Chat.ID, formatGroupList("Groups in this chat:\n", groups, aliases), &message)
+	counts := b.memberCounts(ctx, message.Chat.ID)
+
+	b.sendMessage(ctx, message.Chat.ID, formatGroupList("Groups in this chat:\n", groups, aliases, counts), &message)
 
 	return nil
 }
@@ -297,21 +319,49 @@ func (b *Bot) handleMy(ctx context.Context, message t.Message) error {
 		return nil
 	}
 
-	b.sendMessage(ctx, message.Chat.ID, formatGroupList("Groups you've joined in this chat:\n", groups, nil), &message)
+	b.sendMessage(ctx, message.Chat.ID, formatGroupList("Groups you've joined in this chat:\n", groups, nil, b.memberCounts(ctx, message.Chat.ID)), &message)
 
 	return nil
 }
 
-// formatGroupList renders a MarkdownV2 bullet list of group names (with aliases, if any) under a header.
-func formatGroupList(header string, groups []storage.MentionGroup, aliases map[uint][]string) string {
+// memberCounts returns member counts per group; on failure it logs and returns nil (lists then omit counts).
+func (b *Bot) memberCounts(ctx context.Context, chatID int64) map[uint]int {
+	counts, err := b.storage.GetGroupMemberCounts(ctx, chatID)
+	if err != nil {
+		slog.Error("bot: Failed to count group members", "error", err, "chat_id", chatID)
+
+		return nil
+	}
+
+	return counts
+}
+
+// formatGroupList renders a MarkdownV2 bullet list of group names under a header, each with its
+// member count (when known) and aliases (if any).
+func formatGroupList(header string, groups []storage.MentionGroup, aliases map[uint][]string, counts map[uint]int) string {
 	var sb strings.Builder
 
-	sb.WriteString(header)
+	sb.WriteString(escapeMarkdownV2(header))
 
 	for _, group := range groups {
-		line := group.Name
+		var details []string
+
+		if counts != nil {
+			n := counts[group.ID]
+			if n == 1 {
+				details = append(details, "1 member")
+			} else {
+				details = append(details, fmt.Sprintf("%d members", n))
+			}
+		}
+
 		if names := aliases[group.ID]; len(names) > 0 {
-			line += " (aliases: " + strings.Join(names, ", ") + ")"
+			details = append(details, "aliases: "+strings.Join(names, ", "))
+		}
+
+		line := group.Name
+		if len(details) > 0 {
+			line += " (" + strings.Join(details, "; ") + ")"
 		}
 
 		fmt.Fprintf(&sb, "• %s\n", escapeMarkdownV2(line))
@@ -494,7 +544,7 @@ func (b *Bot) handleFreeFormMessage(ctx context.Context, message t.Message) erro
 
 	b.sendTyping(ctx, tu.ID(message.Chat.ID))
 
-	if err := b.mentionGroups(ctx, groups, message.Chat.ID, &message, message.From); err != nil {
+	if err := b.mentionGroups(ctx, groups, message.Chat.ID, &message, message.From, ""); err != nil {
 		slog.Error("bot: Failed to mention group members", "error", err, "chat_id", message.Chat.ID)
 	}
 

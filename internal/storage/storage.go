@@ -318,6 +318,30 @@ func (s *Storage) GetGroupsByChat(ctx context.Context, chatID int64) ([]MentionG
 	return groups, nil
 }
 
+// GetGroupMemberCounts returns the number of members per group ID for all groups of a chat.
+func (s *Storage) GetGroupMemberCounts(ctx context.Context, chatID int64) (map[uint]int, error) {
+	var rows []struct {
+		GroupID uint
+		Total   int
+	}
+
+	err := s.db.WithContext(ctx).Raw(
+		`SELECT group_id, COUNT(*) AS total FROM group_members
+		 WHERE group_id IN (SELECT id FROM mention_groups WHERE chat_id = ?) GROUP BY group_id`, chatID).Scan(&rows).Error
+	if err != nil {
+		slog.Error("storage: Failed to count members", "error", err, "chat_id", chatID)
+
+		return nil, errors.Join(ErrGet, err)
+	}
+
+	counts := make(map[uint]int, len(rows))
+	for _, row := range rows {
+		counts[row.GroupID] = row.Total
+	}
+
+	return counts, nil
+}
+
 // IsMember checks if a user is a member of a group
 func (s *Storage) IsMember(ctx context.Context, groupID uint, userID int64) (bool, error) {
 	var count int64

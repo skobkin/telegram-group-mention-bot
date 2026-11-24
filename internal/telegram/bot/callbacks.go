@@ -245,7 +245,7 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 		return nil
 	}
 
-	out := action.run(ctx, group, &query.From, msg.ReplyToMessage)
+	out := action.run(ctx, group, &query.From, msg.ReplyToMessage, "")
 	b.answerCallback(ctx, query.ID, toastText(out))
 
 	switch {

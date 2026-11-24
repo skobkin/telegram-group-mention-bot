@@ -38,50 +38,43 @@ func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string
 	return operation(&groups[0], originalMessage)
 }
 
-// formatMemberList formats a list of members for display
-func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
-	slog.Debug("bot:helpers: Formatting member list", "member_count", len(members))
-
-	var memberList []string
-	for _, member := range members {
-		if member.User.Username != "" {
-			memberList = append(memberList, fmt.Sprintf("%s %s (%s)",
-				member.User.FirstName,
-				member.User.LastName,
-				member.User.Username))
-		} else {
-			memberList = append(memberList, fmt.Sprintf("%s %s",
-				member.User.FirstName,
-				member.User.LastName))
-		}
+// displayName joins first and last name without stray spaces; empty names become "user".
+func displayName(u storage.User) string {
+	name := strings.TrimSpace(strings.TrimSpace(u.FirstName) + " " + strings.TrimSpace(u.LastName))
+	if name == "" {
+		return "user"
 	}
 
-	slog.Debug("bot:helpers: Member list formatted", "formatted_count", len(memberList))
+	return name
+}
+
+// formatMemberList formats a list of members for display
+func (b *Bot) formatMemberList(members []storage.GroupMember) []string {
+	memberList := make([]string, 0, len(members))
+	for _, member := range members {
+		line := displayName(member.User)
+		if member.User.Username != "" {
+			line += " (" + member.User.Username + ")"
+		}
+
+		memberList = append(memberList, line)
+	}
 
 	return memberList
 }
 
 // formatMentions formats a list of members for mentioning
 func (b *Bot) formatMentions(members []storage.GroupMember) []string {
-	slog.Debug("bot:helpers: Formatting mentions", "member_count", len(members))
-
-	var mentions []string
+	mentions := make([]string, 0, len(members))
 	for _, member := range members {
 		if member.User.Username != "" {
 			// Usernames are safe to use with @ as they can only contain [A-Za-z0-9_]
-			mentions = append(mentions, fmt.Sprintf("@%s", escapeMarkdownV2(member.User.Username)))
+			mentions = append(mentions, "@"+escapeMarkdownV2(member.User.Username))
 		} else {
-			// For users without username, we need to escape the name parts but not the tg:// URL
-			mentions = append(mentions, fmt.Sprintf(
-				"[%s %s](tg://user?id=%d)",
-				escapeMarkdownV2(member.User.FirstName),
-				escapeMarkdownV2(member.User.LastName),
-				member.UserID,
-			))
+			// For users without username, escape the name but not the tg:// URL
+			mentions = append(mentions, fmt.Sprintf("[%s](tg://user?id=%d)", escapeMarkdownV2(displayName(member.User)), member.UserID))
 		}
 	}
-
-	slog.Debug("bot:helpers: Mentions formatted", "mention_count", len(mentions))
 
 	return mentions
 }
@@ -125,12 +118,19 @@ func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessa
 
 	message := tu.Message(tu.ID(chatID), text)
 	message.ParseMode = "MarkdownV2"
+	message.LinkPreviewOptions = &t.LinkPreviewOptions{IsDisabled: true}
 	if len(replyMarkup) > 0 {
 		message.ReplyMarkup = replyMarkup[0]
 	}
 
 	if originalMessage != nil {
 		message = b.reply(*originalMessage, message)
+
+		// Keep the answer in the originating forum topic. Only for real topics: outside forums
+		// message_thread_id is the reply-chain root and the API rejects it.
+		if originalMessage.IsTopicMessage {
+			message.MessageThreadID = originalMessage.MessageThreadID
+		}
 	}
 
 	sent, err := b.api.SendMessage(ctx, message)
@@ -202,4 +202,24 @@ func (b *Bot) sendTyping(ctx context.Context, chatID t.ChatID) {
 	if err != nil {
 		slog.Error("bot:helpers: Cannot set chat action", "error", err)
 	}
+}
+
+// replyTarget returns the message a mention post should reply to: the message a command replies to
+// (so pinged people see the context), otherwise the command itself. The result keeps the command's
+// forum topic. In forum topics Telegram sets reply_to_message to the topic's creation message for
+// plain messages; that does not count as a reply.
+func replyTarget(command *t.Message) *t.Message {
+	if command == nil {
+		return nil
+	}
+
+	reply := command.ReplyToMessage
+	if reply == nil || reply.ForumTopicCreated != nil || reply.MessageID == 0 {
+		return command
+	}
+
+	target := *command
+	target.MessageID = reply.MessageID
+
+	return &target
 }

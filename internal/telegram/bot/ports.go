@@ -41,6 +41,7 @@ type Store interface {
 	RenameGroup(ctx context.Context, chatID int64, oldName, newName string) error
 	AddAlias(ctx context.Context, chatID int64, groupName, alias string) error
 	RemoveAlias(ctx context.Context, chatID int64, alias string) (bool, error)
+	GetGroupMemberCounts(ctx context.Context, chatID int64) (map[uint]int, error)
 	GetAliasesByChat(ctx context.Context, chatID int64) (map[uint][]string, error)
 	Stats(ctx context.Context) (storage.Stats, error)
 	MigrateChatGroups(ctx context.Context, fromChatID, toChatID int64) error
