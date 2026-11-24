@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"telegram-group-mention-bot/internal/i18n"
 	"telegram-group-mention-bot/internal/storage"
 
 	t "github.com/mymmrac/telego"
@@ -31,6 +32,7 @@ func (o outcome) render() string {
 }
 
 func (b *Bot) joinGroup(ctx context.Context, group *storage.MentionGroup, user *t.User, chatID int64) outcome {
+	lang := langOf(user)
 	slog.Debug("bot: Joining group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
 	// Idempotent insert: the user row is created by middleware (messages) or the callback handler
@@ -38,65 +40,66 @@ func (b *Bot) joinGroup(ctx context.Context, group *storage.MentionGroup, user *
 	if err != nil {
 		logError("bot: Failed to add user to group", err, "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
-		return outcome{text: "Failed to join group."}
+		return outcome{text: tr(lang, "join.failed")}
 	}
 
 	if !added {
-		return outcome{text: fmt.Sprintf("You are already a member of group '%s'.", group.Name)}
+		return outcome{text: tr(lang, "join.already", group.Name)}
 	}
 
 	slog.Info("bot: User joined group", "group_name", group.Name, "chat_id", chatID, "user_id", user.ID)
 
-	return outcome{text: fmt.Sprintf("You have joined group '%s'!", group.Name), ok: true}
+	return outcome{text: tr(lang, "join.done", group.Name), ok: true}
 }
 
-func (b *Bot) leaveGroup(ctx context.Context, group *storage.MentionGroup, userID, chatID int64) outcome {
+func (b *Bot) leaveGroup(ctx context.Context, group *storage.MentionGroup, user *t.User, chatID int64) outcome {
+	lang, userID := langOf(user), user.ID
 	slog.Debug("bot: Leaving group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
 	removed, err := b.storage.RemoveMember(ctx, group.ID, userID)
 	if err != nil {
 		logError("bot: Failed to remove user from group", err, "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
-		return outcome{text: "Failed to leave group."}
+		return outcome{text: tr(lang, "leave.failed")}
 	}
 
 	if !removed {
-		return outcome{text: fmt.Sprintf("You are not a member of group '%s'.", group.Name)}
+		return outcome{text: tr(lang, "leave.not_member", group.Name)}
 	}
 
 	slog.Info("bot: User left group", "group_name", group.Name, "chat_id", chatID, "user_id", userID)
 
-	return outcome{text: fmt.Sprintf("You have left group '%s'!", group.Name), ok: true}
+	return outcome{text: tr(lang, "leave.done", group.Name), ok: true}
 }
 
-func (b *Bot) deleteGroup(ctx context.Context, group *storage.MentionGroup, chatID int64) outcome {
+func (b *Bot) deleteGroup(ctx context.Context, lang i18n.Lang, group *storage.MentionGroup, chatID int64) outcome {
 	slog.Debug("bot: Deleting group", "group_name", group.Name, "chat_id", chatID)
 
 	if len(group.Members) > 0 {
-		return outcome{text: "Cannot delete group: it has members. Ask members to /leave first (chat admins can use /del <name> force)."}
+		return outcome{text: tr(lang, "del.has_members")}
 	}
 
 	if err := b.storage.DeleteGroup(ctx, group.ID); err != nil {
 		logError("bot: Failed to delete group", err, "group_name", group.Name, "chat_id", chatID)
 
-		return outcome{text: "Failed to delete group."}
+		return outcome{text: tr(lang, "del.failed")}
 	}
 
 	slog.Info("bot: Group deleted", "group_name", group.Name, "chat_id", chatID)
 
-	return outcome{text: fmt.Sprintf("Group '%s' has been deleted!", group.Name), ok: true}
+	return outcome{text: tr(lang, "del.done", group.Name), ok: true}
 }
 
 // expandableMembersThreshold is the member count above which /show hides the list in an
 // expandable blockquote.
 const expandableMembersThreshold = 10
 
-func (b *Bot) showGroupMembers(group *storage.MentionGroup) outcome {
+func (b *Bot) showGroupMembers(lang i18n.Lang, group *storage.MentionGroup) outcome {
 	if len(group.Members) == 0 {
-		return outcome{text: fmt.Sprintf("Group '%s' has no members.", group.Name)}
+		return outcome{text: tr(lang, "show.empty", group.Name)}
 	}
 
-	header := escapeMarkdownV2(fmt.Sprintf("Members of group '%s' (%d):", group.Name, len(group.Members)))
+	header := md(lang, "show.header", group.Name, len(group.Members))
 	memberList := b.formatMemberList(group.Members)
 
 	if len(memberList) <= expandableMembersThreshold {
@@ -111,10 +114,9 @@ func expandableBlockquote(lines []string) string {
 	var sb strings.Builder
 
 	for i, line := range lines {
-		switch {
-		case i == 0:
+		if i == 0 {
 			sb.WriteString("**>")
-		default:
+		} else {
 			sb.WriteString("\n>")
 		}
 
@@ -133,8 +135,10 @@ const anonymousAdminBotID int64 = 1087968824
 // (may be nil) is the message the post replies to and whose forum topic it stays in; note is
 // optional text from the command that is shown below the header.
 // Cooldowns and the member cap apply here, so commands, buttons and free-form mentions share them.
-func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message, actor *t.User, note string) error {
+func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, chatID int64, originalMessage *t.Message, actor *t.User, note string) {
 	slog.Debug("bot: Mentioning groups", "chat_id", chatID, "group_count", len(groups))
+
+	lang := langOf(actor)
 
 	var withMembers []storage.MentionGroup
 	for _, group := range groups {
@@ -149,13 +153,13 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 
 	if len(withMembers) == 0 {
 		slog.Debug("bot: No members to mention", "chat_id", chatID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2("No members to mention."), originalMessage)
+		b.sendMessage(ctx, chatID, md(lang, "mention.none"), originalMessage)
 
-		return nil
+		return
 	}
 
 	if !b.allowMention(ctx, chatID, withMembers, originalMessage, actor) {
-		return nil
+		return
 	}
 
 	budget := b.maxMentions // 0 = unlimited
@@ -196,13 +200,11 @@ func (b *Bot) mentionGroups(ctx context.Context, groups []storage.MentionGroup, 
 	finalText += strings.Join(groupLines, "\n")
 
 	if skipped > 0 {
-		finalText += "\n\n" + escapeMarkdownV2(fmt.Sprintf("…and %d more not pinged (limit: %d per post).", skipped, b.maxMentions))
+		finalText += "\n\n" + md(lang, "mention.skipped", skipped, b.maxMentions)
 	}
 
 	slog.Debug("bot: Sending mentions", "chat_id", chatID, "message_length", len(finalText), "skipped", skipped)
-	b.sendPost(ctx, chatID, finalText, originalMessage, joinLeaveKeyboard(buttons))
-
-	return nil
+	b.sendPost(ctx, chatID, finalText, originalMessage, joinLeaveKeyboard(lang, buttons))
 }
 
 // allowMention applies the per-group and per-user cooldowns. When a mention is throttled it
@@ -239,7 +241,7 @@ func (b *Bot) allowMention(ctx context.Context, chatID int64, groups []storage.M
 
 	if res.notify {
 		seconds := int((res.wait + time.Second - 1) / time.Second)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Please wait %d s before mentioning again.", seconds)), originalMessage)
+		b.sendMessage(ctx, chatID, md(langOf(actor), "throttle.wait", seconds), originalMessage)
 	}
 
 	return false

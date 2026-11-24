@@ -13,21 +13,23 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 )
 
-// executeOnGroup executes a function on a group if it exists. notFound is the reply
-// format for a missing group (%s = name); empty means "Group not found.".
-func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, notFound string, operation func(*storage.MentionGroup, *t.Message) error) error {
+// executeOnGroup executes a function on a group if it exists. With namedNotFound a missing group
+// answers "Group '<name>' not found.", otherwise "Group not found.".
+func (b *Bot) executeOnGroup(ctx context.Context, chatID int64, groupName string, originalMessage *t.Message, namedNotFound bool, operation func(*storage.MentionGroup, *t.Message) error) error {
+	lang := langOf(originalMessage.From)
+
 	groups, err := b.storage.FindGroupsByChatAndNamesWithMembers(ctx, chatID, []string{groupName})
 	if err != nil {
 		logError("bot:helpers: Failed to get group", err, "group_name", groupName, "chat_id", chatID)
-		b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to look up the group."), originalMessage)
+		b.sendMessage(ctx, chatID, md(lang, "error.lookup"), originalMessage)
 
 		return err
 	}
 
 	if len(groups) == 0 {
-		text := "Group not found."
-		if notFound != "" {
-			text = fmt.Sprintf(notFound, groupName)
+		text := tr(lang, "group.not_found_plain")
+		if namedNotFound {
+			text = tr(lang, "group.not_found", groupName)
 		}
 
 		b.sendMessage(ctx, chatID, escapeMarkdownV2(text), originalMessage)
@@ -113,7 +115,7 @@ func isValidGroupName(name string) bool {
 	return true
 }
 
-func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessage *t.Message, autoDelete bool, replyMarkup ...t.ReplyMarkup) *t.Message {
+func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessage *t.Message, autoDelete bool, replyMarkup ...t.ReplyMarkup) {
 	slog.Debug("bot:helpers: Going to send message", "chat_id", chatID, "text_length", len(text), "has_reply_markup", len(replyMarkup) > 0, "has_original_message", originalMessage != nil)
 
 	message := tu.Message(tu.ID(chatID), text)
@@ -159,7 +161,7 @@ func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessa
 		if err != nil {
 			logError("bot:helpers: Failed to send message", err, "chat_id", chatID, "text_length", len(text))
 
-			return nil
+			return
 		}
 	} else {
 		slog.Debug("bot:helpers: Message sent successfully")
@@ -173,8 +175,6 @@ func (b *Bot) send(ctx context.Context, chatID int64, text string, originalMessa
 
 		b.scheduleDelete(chatID, ids...)
 	}
-
-	return sent
 }
 
 // sendMessage sends a service reply (confirmation, error, list, picker). With AUTO_DELETE_SECONDS set,

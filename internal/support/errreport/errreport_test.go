@@ -126,13 +126,13 @@ func TestErrorEventsAreScrubbed(t *testing.T) {
 
 	scope := hub.Scope()
 	scope.SetTag("secret", testToken)
-	scope.SetExtra("detail", "bad "+testToken)
+	scope.SetContext("detail", sentry.Context{"value": "bad " + testToken})
 	scope.AddBreadcrumb(&sentry.Breadcrumb{Message: "calling " + testToken, Data: map[string]any{"url": testToken}}, 10)
 
 	captureWith(hub, errors.New("Post https://api.telegram.org/bot"+testToken+"/sendMessage: refused"))
 
 	event := transport.events[0]
-	dump := fmt.Sprintf("%+v|%+v|%+v|%+v", event.Exception, event.Tags, event.Extra, event.Breadcrumbs[0])
+	dump := fmt.Sprintf("%+v|%+v|%+v|%+v", event.Exception, event.Tags, event.Contexts, event.Breadcrumbs[0])
 
 	if strings.Contains(dump, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") {
 		t.Fatalf("token leaked: %s", dump)

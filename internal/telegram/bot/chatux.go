@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"telegram-group-mention-bot/internal/i18n"
+
 	t "github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 )
@@ -72,8 +74,8 @@ func (b *Bot) scheduleDelete(chatID int64, messageIDs ...int) {
 	time.AfterFunc(b.autoDelete, run)
 }
 
-// menuCommands builds the Telegram command menu from the command table.
-func menuCommands(commands []command) []t.BotCommand {
+// menuCommands builds the Telegram command menu from the command table in the given language.
+func menuCommands(lang i18n.Lang, commands []command) []t.BotCommand {
 	var menu []t.BotCommand
 
 	for _, cmd := range commands {
@@ -87,7 +89,7 @@ func menuCommands(commands []command) []t.BotCommand {
 		}
 
 		for _, name := range names {
-			menu = append(menu, t.BotCommand{Command: name, Description: truncate(cmd.help, 256)})
+			menu = append(menu, t.BotCommand{Command: name, Description: truncate(tr(lang, "cmd."+cmd.names[0]), 256)})
 		}
 	}
 
@@ -103,13 +105,12 @@ func truncate(s string, limit int) string {
 	return string(runes[:limit-1]) + "…"
 }
 
-// syncCommandMenu registers the commands for private and group chats, only when the list
-// Telegram has differs from the table. Failures are logged and never stop the bot.
+// syncCommandMenu registers the commands for private and group chats in every supported language
+// (English is the default for everyone else), only when the list Telegram has differs from the
+// table. Failures are logged and never stop the bot.
 func (b *Bot) syncCommandMenu(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, menuSyncTimeout)
 	defer cancel()
-
-	want := menuCommands(b.commands())
 
 	scopes := []struct {
 		name  string
@@ -119,20 +120,30 @@ func (b *Bot) syncCommandMenu(ctx context.Context) {
 		{"groups", tu.ScopeAllGroupChats()},
 	}
 
-	for _, s := range scopes {
-		have, err := b.api.GetMyCommands(ctx, &t.GetMyCommandsParams{Scope: s.scope})
-		if err == nil && slices.Equal(have, want) {
-			slog.Debug("bot: Command menu is up to date", "scope", s.name)
+	for _, lang := range i18n.Languages {
+		want := menuCommands(lang, b.commands())
 
-			continue
+		// English is registered without a language code so it serves every other language too
+		code := string(lang)
+		if lang == i18n.EN {
+			code = ""
 		}
 
-		if err := b.api.SetMyCommands(ctx, &t.SetMyCommandsParams{Commands: want, Scope: s.scope}); err != nil {
-			slog.Warn("bot: Failed to register the command menu", "error", err, "scope", s.name)
+		for _, s := range scopes {
+			have, err := b.api.GetMyCommands(ctx, &t.GetMyCommandsParams{Scope: s.scope, LanguageCode: code})
+			if err == nil && slices.Equal(have, want) {
+				slog.Debug("bot: Command menu is up to date", "scope", s.name, "language", code)
 
-			continue
+				continue
+			}
+
+			if err := b.api.SetMyCommands(ctx, &t.SetMyCommandsParams{Commands: want, Scope: s.scope, LanguageCode: code}); err != nil {
+				slog.Warn("bot: Failed to register the command menu", "error", err, "scope", s.name, "language", code)
+
+				continue
+			}
+
+			slog.Info("bot: Command menu registered", "scope", s.name, "language", code, "commands", len(want))
 		}
-
-		slog.Info("bot: Command menu registered", "scope", s.name, "commands", len(want))
 	}
 }

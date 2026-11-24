@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"telegram-group-mention-bot/internal/i18n"
 	"testing"
 
 	"telegram-group-mention-bot/internal/storage"
@@ -69,10 +70,10 @@ func (h *harness) lastToast() string {
 	return h.api.answers[len(h.api.answers)-1].Text
 }
 
-func (h *harness) groupID(name string) uint {
+func (h *harness) devsID() uint {
 	h.t.Helper()
 
-	g, err := h.store.GetGroup(context.Background(), name, testChatID)
+	g, err := h.store.GetGroup(context.Background(), "devs", testChatID)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestPickerJoinEditsMessage(tb *testing.T) {
 	alice := h.user(1, "alice", "Alice")
 	h.group("devs")
 
-	h.press(alice, fmt.Sprintf("v1:join:%d:1", h.groupID("devs")), nil)
+	h.press(alice, fmt.Sprintf("v1:join:%d:1", h.devsID()), nil)
 
 	if got := h.lastToast(); !strings.Contains(got, "You have joined") {
 		tb.Fatalf("unexpected toast %q", got)
@@ -111,13 +112,13 @@ func TestPickerRejectsOtherUsers(tb *testing.T) {
 	bob := h.user(2, "bob", "Bob")
 	h.group("devs")
 
-	h.press(bob, fmt.Sprintf("v1:join:%d:1", h.groupID("devs")), nil)
+	h.press(bob, fmt.Sprintf("v1:join:%d:1", h.devsID()), nil)
 
 	if got := h.lastToast(); got != "This menu is not for you." {
 		tb.Fatalf("unexpected toast %q", got)
 	}
 
-	members, _ := h.store.GetGroupMembers(context.Background(), h.groupID("devs"))
+	members, _ := h.store.GetGroupMembers(context.Background(), h.devsID())
 	if len(members) != 0 || len(h.api.edits) != 0 {
 		tb.Fatal("another user's picker must not do anything")
 	}
@@ -154,7 +155,7 @@ func TestCallbackForDeletedGroup(tb *testing.T) {
 	h := newHarness(tb)
 	alice := h.user(1, "alice", "Alice")
 	h.group("devs")
-	id := h.groupID("devs")
+	id := h.devsID()
 
 	if err := h.store.DeleteGroup(context.Background(), id); err != nil {
 		tb.Fatal(err)
@@ -214,7 +215,7 @@ func TestPickerMentionPostsAndDeletesPicker(tb *testing.T) {
 	h.group("devs", 1)
 
 	origin := &t.Message{MessageID: 77, Chat: t.Chat{ID: testChatID}}
-	h.press(alice, fmt.Sprintf("v1:m:%d:1", h.groupID("devs")), origin)
+	h.press(alice, fmt.Sprintf("v1:m:%d:1", h.devsID()), origin)
 
 	post := h.api.last(tb)
 	contains(tb, post, "@alice")
@@ -248,19 +249,19 @@ func TestPickerPaging(tb *testing.T) {
 		return buttons, nav
 	}
 
-	if n, nav := count(groupPickerKeyboard("join", groups, 0, 1)); n != 20 || len(nav) != 1 || nav[0] != "Next ›" {
+	if n, nav := count(groupPickerKeyboard(i18n.EN, "join", groups, 0, 1)); n != 20 || len(nav) != 1 || nav[0] != "Next ›" {
 		tb.Fatalf("first page: %d buttons, nav %v", n, nav)
 	}
 
-	if n, nav := count(groupPickerKeyboard("join", groups, 1, 1)); n != 20 || len(nav) != 2 {
+	if n, nav := count(groupPickerKeyboard(i18n.EN, "join", groups, 1, 1)); n != 20 || len(nav) != 2 {
 		tb.Fatalf("middle page: %d buttons, nav %v", n, nav)
 	}
 
-	if n, nav := count(groupPickerKeyboard("join", groups, 2, 1)); n != 5 || len(nav) != 1 || nav[0] != "‹ Prev" {
+	if n, nav := count(groupPickerKeyboard(i18n.EN, "join", groups, 2, 1)); n != 5 || len(nav) != 1 || nav[0] != "‹ Prev" {
 		tb.Fatalf("last page: %d buttons, nav %v", n, nav)
 	}
 
-	if groupPickerKeyboard("join", nil, 0, 1) != nil {
+	if groupPickerKeyboard(i18n.EN, "join", nil, 0, 1) != nil {
 		tb.Fatal("no groups must give no keyboard")
 	}
 }

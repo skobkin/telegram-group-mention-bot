@@ -52,7 +52,7 @@ func (f *fakeAPI) GetMyCommands(_ context.Context, params *t.GetMyCommandsParams
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.menus[params.Scope.ScopeType()], nil
+	return f.menus[params.Scope.ScopeType()+"/"+params.LanguageCode], nil
 }
 
 func (f *fakeAPI) SetMyCommands(_ context.Context, params *t.SetMyCommandsParams) error {
@@ -63,7 +63,7 @@ func (f *fakeAPI) SetMyCommands(_ context.Context, params *t.SetMyCommandsParams
 		f.menus = make(map[string][]t.BotCommand)
 	}
 
-	f.menus[params.Scope.ScopeType()] = params.Commands
+	f.menus[params.Scope.ScopeType()+"/"+params.LanguageCode] = params.Commands
 	f.menuSets++
 
 	return nil

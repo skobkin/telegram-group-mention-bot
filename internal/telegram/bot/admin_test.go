@@ -30,10 +30,10 @@ func (h *harness) runReplying(from, target *t.User, text string) *t.SendMessageP
 	return nil
 }
 
-func (h *harness) memberCount(name string) int {
+func (h *harness) memberCount() int {
 	h.t.Helper()
 
-	members, err := h.store.GetGroupMembers(context.Background(), h.groupID(name))
+	members, err := h.store.GetGroupMembers(context.Background(), h.devsID())
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestAdminAddAndRemoveMember(tb *testing.T) {
 
 	contains(tb, h.runReplying(admin, bob, "/add devs"), "Bob was added to group 'devs'")
 
-	if h.memberCount("devs") != 1 {
+	if h.memberCount() != 1 {
 		tb.Fatal("bob should be a member")
 	}
 
@@ -72,7 +72,7 @@ func TestAdminCommandsRejectNonAdmins(tb *testing.T) {
 	contains(tb, h.runReplying(alice, bob, "/remove devs"), "Only chat admins")
 	contains(tb, h.run(alice, "/del devs force"), "Only chat admins")
 
-	if h.memberCount("devs") != 1 {
+	if h.memberCount() != 1 {
 		tb.Fatal("non-admin must not change members")
 	}
 }
@@ -135,7 +135,7 @@ func TestForceDeleteNeedsConfirmation(tb *testing.T) {
 	ask := h.run(admin, "/del devs force")
 	contains(tb, ask, "1 member")
 
-	if h.memberCount("devs") != 1 {
+	if h.memberCount() != 1 {
 		tb.Fatal("nothing may be deleted before confirmation")
 	}
 
@@ -146,13 +146,13 @@ func TestForceDeleteNeedsConfirmation(tb *testing.T) {
 	other := h.user(3, "eve", "Eve")
 	h.press(other, confirm, nil)
 
-	if h.lastToast() != "This menu is not for you." || h.memberCount("devs") != 1 {
+	if h.lastToast() != "This menu is not for you." || h.memberCount() != 1 {
 		tb.Fatal("only the requesting admin may confirm")
 	}
 
 	h.press(admin, cancel, nil)
 
-	if !strings.Contains(plain(h.api.edits[len(h.api.edits)-1].Text), "cancelled") || h.memberCount("devs") != 1 {
+	if !strings.Contains(plain(h.api.edits[len(h.api.edits)-1].Text), "cancelled") || h.memberCount() != 1 {
 		tb.Fatal("cancel must keep the group")
 	}
 
@@ -205,8 +205,12 @@ func TestAdminCacheExpiry(tb *testing.T) {
 
 	ctx := context.Background()
 
-	if !h.bot.isChatAdmin(ctx, testChatID, 1) || !h.bot.isChatAdmin(ctx, testChatID, 1) {
+	if !h.bot.isChatAdmin(ctx, testChatID, 1) {
 		tb.Fatal("user 1 is an admin")
+	}
+
+	if !h.bot.isChatAdmin(ctx, testChatID, 1) {
+		tb.Fatal("user 1 is still an admin (cached)")
 	}
 
 	if h.api.adminCall != 1 {

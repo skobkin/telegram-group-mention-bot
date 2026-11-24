@@ -4,6 +4,8 @@ Operator-facing changes, newest first.
 
 ## Unreleased
 
+- Replies are now localized (English and Russian) by the sender's Telegram `language_code`; everyone else gets English. No configuration needed.
+  The command menu is registered for `ru` as well. Error replies no longer include raw error text (details are logged). `/stats` stays English.
 - New optional `SENTRY_DSN` / `SENTRY_ENVIRONMENT`: unexpected errors and recovered panics are reported to Sentry (disabled when the DSN
   is empty). Events are scrubbed of the bot token; expected outcomes (not found, already exists, Telegram 403/429, context cancellation)
   are not reported. Adds the `sentry-go` dependency.

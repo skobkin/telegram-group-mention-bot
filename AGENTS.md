@@ -11,6 +11,8 @@ Telegram bot (Go) that lets chat members create mention groups and ping them at 
   name share `groupCommand` (name or picker). Handlers depend on the `API` and `Store` interfaces (`ports.go`),
   so tests inject a fake API and a temp-file SQLite store (see `handlers_test.go`).
 - `internal/storage` — GORM/SQLite persistence.
+- `internal/i18n` — en/ru message catalogue; every user-facing string goes through it (`tr`/`md` in `bot/lang.go`), and a test fails when `ru` lacks a key. Never show raw Go errors to users.
+- `internal/support/errreport` — optional Sentry reporting; the bot reports only through `logError` (`bot/report.go`) so a failure yields one scrubbed event.
 - `internal/logging`, `internal/support/secretscrub` — slog scrubbing; the bot token is registered as a secret and must never reach logs.
 - `internal/buildinfo` — `Version`, set with `-ldflags "-X telegram-group-mention-bot/internal/buildinfo.Version=..."`.
 

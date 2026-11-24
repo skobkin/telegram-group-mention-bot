@@ -132,7 +132,7 @@ func TestCommandMenu(tb *testing.T) {
 
 	for _, scope := range []string{t.ScopeTypeAllPrivateChats, t.ScopeTypeAllGroupChats} {
 		var names []string
-		for _, c := range h.api.menus[scope] {
+		for _, c := range h.api.menus[scope+"/"] {
 			names = append(names, c.Command)
 
 			if c.Description == "" || len(c.Description) > 256 {
@@ -149,6 +149,12 @@ func TestCommandMenu(tb *testing.T) {
 		if slices.Contains(names, "stats") || slices.Contains(names, "m") {
 			tb.Fatalf("hidden or alias commands must not be in the menu: %v", names)
 		}
+	}
+
+	// Russian descriptions are registered with their own language code
+	ruMenu := h.api.menus[t.ScopeTypeAllGroupChats+"/ru"]
+	if len(ruMenu) == 0 || ruMenu[0].Description == h.api.menus[t.ScopeTypeAllGroupChats+"/"][0].Description {
+		tb.Fatalf("expected a translated menu for ru, got %v", ruMenu)
 	}
 
 	// unchanged list: nothing is set again

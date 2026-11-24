@@ -13,6 +13,7 @@ A Telegram bot that allows users to create mention groups and mention all member
 - List group members without mentioning them
 - Delete empty groups
 - Mention posts can carry a message, reply to the message you replied to, stay in their forum topic and never show link previews; long `/show` lists collapse into an expandable quote
+- English and Russian replies, picked per user from their Telegram language (other languages get English); the command menu is localized too
 - Quiet by default: successful `/new`, `/join`, `/leave`, `/del` are acknowledged with a 👍 reaction (text reply if reactions are unavailable); optional auto-deletion of service replies
 - Commands are registered in Telegram's command menu (private chats and groups)
 - Anti-spam: per-group and per-user mention cooldowns (chat admins are exempt) and an optional cap on pinged members

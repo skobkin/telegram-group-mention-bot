@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"telegram-group-mention-bot/internal/i18n"
 	"telegram-group-mention-bot/internal/storage"
 
 	t "github.com/mymmrac/telego"
@@ -70,7 +71,7 @@ func parseCallback(raw string) (callbackData, error) {
 		return callbackData{paging: true, action: parts[2], page: page, requester: requester}, nil
 	}
 
-	if len(parts) != 4 || !(pickerActions[parts[1]] || confirmActions[parts[1]]) {
+	if len(parts) != 4 || (!pickerActions[parts[1]] && !confirmActions[parts[1]]) {
 		return callbackData{}, errBadCallback
 	}
 
@@ -90,7 +91,7 @@ func parseCallback(raw string) (callbackData, error) {
 }
 
 // groupPickerKeyboard builds the inline picker (two columns, paged) for an action.
-func groupPickerKeyboard(action string, groups []storage.MentionGroup, page int, requester int64) *t.InlineKeyboardMarkup {
+func groupPickerKeyboard(lang i18n.Lang, action string, groups []storage.MentionGroup, page int, requester int64) *t.InlineKeyboardMarkup {
 	if len(groups) == 0 {
 		return nil
 	}
@@ -113,12 +114,12 @@ func groupPickerKeyboard(action string, groups []storage.MentionGroup, page int,
 
 		if page > 0 {
 			data := callbackData{paging: true, action: action, page: page - 1, requester: requester}
-			nav = append(nav, tu.InlineKeyboardButton("‹ Prev").WithCallbackData(data.String()))
+			nav = append(nav, tu.InlineKeyboardButton(tr(lang, "btn.prev")).WithCallbackData(data.String()))
 		}
 
 		if page < pages-1 {
 			data := callbackData{paging: true, action: action, page: page + 1, requester: requester}
-			nav = append(nav, tu.InlineKeyboardButton("Next ›").WithCallbackData(data.String()))
+			nav = append(nav, tu.InlineKeyboardButton(tr(lang, "btn.next")).WithCallbackData(data.String()))
 		}
 
 		rows = append(rows, nav)
@@ -128,7 +129,7 @@ func groupPickerKeyboard(action string, groups []storage.MentionGroup, page int,
 }
 
 // joinLeaveKeyboard builds the Join/Leave buttons shown under a mention post, or nil.
-func joinLeaveKeyboard(groups []storage.MentionGroup) *t.InlineKeyboardMarkup {
+func joinLeaveKeyboard(lang i18n.Lang, groups []storage.MentionGroup) *t.InlineKeyboardMarkup {
 	if len(groups) == 0 {
 		return nil
 	}
@@ -140,8 +141,8 @@ func joinLeaveKeyboard(groups []storage.MentionGroup) *t.InlineKeyboardMarkup {
 		join := callbackData{action: "join", groupID: group.ID}
 		leave := callbackData{action: "leave", groupID: group.ID}
 		rows = append(rows, tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("Join "+group.Name).WithCallbackData(join.String()),
-			tu.InlineKeyboardButton("Leave "+group.Name).WithCallbackData(leave.String()),
+			tu.InlineKeyboardButton(tr(lang, "btn.join", group.Name)).WithCallbackData(join.String()),
+			tu.InlineKeyboardButton(tr(lang, "btn.leave", group.Name)).WithCallbackData(leave.String()),
 		))
 	}
 
@@ -185,16 +186,18 @@ func (b *Bot) editMessage(ctx context.Context, msg *t.Message, markdown string) 
 
 // handleCallback processes inline keyboard presses: group pickers and Join/Leave buttons.
 func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
+	lang := langOf(&query.From)
+
 	data, err := parseCallback(query.Data)
 	if err != nil {
 		slog.Debug("bot: Rejected callback data", "from_id", query.From.ID)
-		b.answerCallback(ctx, query.ID, "Invalid button.")
+		b.answerCallback(ctx, query.ID, tr(lang, "cb.invalid"))
 
-		return nil
+		return nil //nolint:nilerr // the invalid data is answered to the user, not an update failure
 	}
 
 	if query.Message == nil || !query.Message.IsAccessible() {
-		b.answerCallback(ctx, query.ID, "This menu has expired.")
+		b.answerCallback(ctx, query.ID, tr(lang, "cb.expired"))
 
 		return nil
 	}
@@ -203,7 +206,7 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 	isPicker := data.requester != 0
 
 	if isPicker && data.requester != query.From.ID {
-		b.answerCallback(ctx, query.ID, "This menu is not for you.")
+		b.answerCallback(ctx, query.ID, tr(lang, "cb.not_yours"))
 
 		return nil
 	}
@@ -224,23 +227,23 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 
 	switch {
 	case errors.Is(err, storage.ErrNotFound) || (err == nil && group.ChatID != msg.Chat.ID):
-		b.answerCallback(ctx, query.ID, "This group no longer exists.")
+		b.answerCallback(ctx, query.ID, tr(lang, "cb.group_gone"))
 
 		if isPicker {
-			b.editMessage(ctx, msg, escapeMarkdownV2("This group no longer exists."))
+			b.editMessage(ctx, msg, md(lang, "cb.group_gone"))
 		}
 
 		return nil
 	case err != nil:
-		b.answerCallback(ctx, query.ID, "Something went wrong. Please try again.")
+		b.answerCallback(ctx, query.ID, tr(lang, "error.generic"))
 
-		return nil
+		return nil //nolint:nilerr // reported to the user; the update itself is handled
 	}
 
 	// Joining needs the user row (foreign key); messages create it in middleware, callbacks here
 	if _, err := b.storage.CreateOrUpdateUser(ctx, query.From.ID, query.From.Username, query.From.FirstName, query.From.LastName); err != nil {
 		logError("bot: Failed to sync user for callback", err, "user_id", query.From.ID)
-		b.answerCallback(ctx, query.ID, "Something went wrong. Please try again.")
+		b.answerCallback(ctx, query.ID, tr(lang, "error.generic"))
 
 		return nil
 	}
@@ -265,17 +268,19 @@ func (b *Bot) handleCallback(ctx context.Context, query t.CallbackQuery) error {
 
 // handlePickerPage switches a picker to another page.
 func (b *Bot) handlePickerPage(ctx context.Context, query t.CallbackQuery, msg *t.Message, action groupAction, data callbackData) error {
+	lang := langOf(&query.From)
+
 	groups, err := b.groupsFor(ctx, msg.Chat.ID, query.From.ID, action.source)
 	if err != nil {
-		b.answerCallback(ctx, query.ID, "Something went wrong. Please try again.")
+		b.answerCallback(ctx, query.ID, tr(lang, "error.generic"))
 
-		return nil
+		return nil //nolint:nilerr // reported to the user; the update itself is handled
 	}
 
-	keyboard := groupPickerKeyboard(action.key, groups, data.page, query.From.ID)
+	keyboard := groupPickerKeyboard(lang, action.key, groups, data.page, query.From.ID)
 	if keyboard == nil {
-		b.answerCallback(ctx, query.ID, "No groups available to "+action.verb+".")
-		b.editMessage(ctx, msg, escapeMarkdownV2("No groups available to "+action.verb+"."))
+		b.answerCallback(ctx, query.ID, tr(lang, "picker.none."+action.key))
+		b.editMessage(ctx, msg, md(lang, "picker.none."+action.key))
 
 		return nil
 	}

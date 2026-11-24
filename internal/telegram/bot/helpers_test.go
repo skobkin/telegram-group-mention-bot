@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"telegram-group-mention-bot/internal/i18n"
 	"telegram-group-mention-bot/internal/storage"
 )
 
@@ -108,7 +109,7 @@ func TestGroupNamesFromText(t *testing.T) {
 
 func TestHelpListsEveryCommand(t *testing.T) {
 	b := &Bot{}
-	text := helpText(b.commands())
+	text := helpText(i18n.EN, b.commands())
 	seen := map[string]bool{}
 
 	for _, cmd := range b.commands() {

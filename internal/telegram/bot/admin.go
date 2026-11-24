@@ -3,13 +3,13 @@ package bot
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf16"
 
+	"telegram-group-mention-bot/internal/i18n"
 	"telegram-group-mention-bot/internal/storage"
 
 	t "github.com/mymmrac/telego"
@@ -154,22 +154,23 @@ func (b *Bot) handleAdminMember(add bool) commandHandler {
 
 	return func(ctx context.Context, message t.Message) error {
 		chatID := message.Chat.ID
+		lang := langOf(message.From)
 
 		if message.Chat.Type == t.ChatTypePrivate {
-			b.sendMessage(ctx, chatID, escapeMarkdownV2("This command only works in group chats."), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.group_only"), &message)
 
 			return nil
 		}
 
 		if !b.isAdminMessage(ctx, &message) {
-			b.sendMessage(ctx, chatID, escapeMarkdownV2("Only chat admins can use /"+name+"."), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.only."+name), &message)
 
 			return nil
 		}
 
 		args := strings.Fields(message.Text)
 		if len(args) < 2 {
-			b.sendMessage(ctx, chatID, escapeMarkdownV2(fmt.Sprintf("Usage: reply to a user's message with /%s <group_name> (or add a @username / mention after the name).", name)), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.usage."+name), &message)
 
 			return nil
 		}
@@ -178,27 +179,27 @@ func (b *Bot) handleAdminMember(add bool) commandHandler {
 
 		switch {
 		case errors.Is(err, errNoTarget):
-			b.sendMessage(ctx, chatID, escapeMarkdownV2("Reply to the user's message or mention them to choose who to "+name+"."), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.target."+name), &message)
 
 			return nil
 		case errors.Is(err, storage.ErrNotFound):
-			b.sendMessage(ctx, chatID, escapeMarkdownV2("I don't know that user yet. Reply to one of their messages instead."), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.unknown_user"), &message)
 
 			return nil
 		case err != nil:
 			logError("bot: Failed to resolve target user", err, "chat_id", chatID)
-			b.sendMessage(ctx, chatID, escapeMarkdownV2("Failed to find the user."), &message)
+			b.sendMessage(ctx, chatID, md(lang, "admin.user_failed"), &message)
 
 			return nil
 		}
 
-		return b.executeOnGroup(ctx, chatID, args[1], &message, "Group '%s' not found.",
+		return b.executeOnGroup(ctx, chatID, args[1], &message, true,
 			func(group *storage.MentionGroup, original *t.Message) error {
 				var out outcome
 				if add {
-					out = b.adminAddMember(ctx, group, target)
+					out = b.adminAddMember(ctx, lang, group, target)
 				} else {
-					out = b.adminRemoveMember(ctx, group, target)
+					out = b.adminRemoveMember(ctx, lang, group, target)
 				}
 
 				if out.ok {
@@ -212,34 +213,34 @@ func (b *Bot) handleAdminMember(add bool) commandHandler {
 	}
 }
 
-func (b *Bot) adminAddMember(ctx context.Context, group *storage.MentionGroup, target *storage.User) outcome {
+func (b *Bot) adminAddMember(ctx context.Context, lang i18n.Lang, group *storage.MentionGroup, target *storage.User) outcome {
 	added, err := b.storage.AddMember(ctx, group.ID, &storage.User{ID: target.ID})
 	if err != nil {
 		logError("bot: Failed to add member", err, "group_id", group.ID, "user_id", target.ID)
 
-		return outcome{text: "Failed to add the user."}
+		return outcome{text: tr(lang, "admin.add_failed")}
 	}
 
 	if !added {
-		return outcome{text: fmt.Sprintf("%s is already a member of group '%s'.", target.FirstName, group.Name)}
+		return outcome{text: tr(lang, "admin.already", target.FirstName, group.Name)}
 	}
 
-	return outcome{text: fmt.Sprintf("%s was added to group '%s'.", target.FirstName, group.Name), ok: true}
+	return outcome{text: tr(lang, "admin.added", target.FirstName, group.Name), ok: true}
 }
 
-func (b *Bot) adminRemoveMember(ctx context.Context, group *storage.MentionGroup, target *storage.User) outcome {
+func (b *Bot) adminRemoveMember(ctx context.Context, lang i18n.Lang, group *storage.MentionGroup, target *storage.User) outcome {
 	removed, err := b.storage.RemoveMember(ctx, group.ID, target.ID)
 	if err != nil {
 		logError("bot: Failed to remove member", err, "group_id", group.ID, "user_id", target.ID)
 
-		return outcome{text: "Failed to remove the user."}
+		return outcome{text: tr(lang, "admin.remove_failed")}
 	}
 
 	if !removed {
-		return outcome{text: fmt.Sprintf("%s is not a member of group '%s'.", target.FirstName, group.Name)}
+		return outcome{text: tr(lang, "admin.not_member", target.FirstName, group.Name)}
 	}
 
-	return outcome{text: fmt.Sprintf("%s was removed from group '%s'.", target.FirstName, group.Name), ok: true}
+	return outcome{text: tr(lang, "admin.removed", target.FirstName, group.Name), ok: true}
 }
 
 // forceDeleteRequested reports whether a /del command ends with the "force" keyword.
@@ -250,24 +251,24 @@ func forceDeleteRequested(args []string) bool {
 // handleForceDelete asks an admin to confirm deleting a group together with its members.
 func (b *Bot) handleForceDelete(ctx context.Context, message t.Message, groupName string) error {
 	chatID := message.Chat.ID
+	lang := langOf(message.From)
 
 	if !b.isAdminMessage(ctx, &message) {
-		b.sendMessage(ctx, chatID, escapeMarkdownV2("Only chat admins can force-delete groups."), &message)
+		b.sendMessage(ctx, chatID, md(lang, "force.only_admins"), &message)
 
 		return nil
 	}
 
-	return b.executeOnGroup(ctx, chatID, groupName, &message, "", func(group *storage.MentionGroup, original *t.Message) error {
+	return b.executeOnGroup(ctx, chatID, groupName, &message, false, func(group *storage.MentionGroup, original *t.Message) error {
 		confirm := callbackData{action: "df", groupID: group.ID, requester: message.From.ID}
 		cancel := callbackData{action: "dx", groupID: group.ID, requester: message.From.ID}
 
 		keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("Delete").WithCallbackData(confirm.String()),
-			tu.InlineKeyboardButton("Cancel").WithCallbackData(cancel.String()),
+			tu.InlineKeyboardButton(tr(lang, "btn.delete")).WithCallbackData(confirm.String()),
+			tu.InlineKeyboardButton(tr(lang, "btn.cancel")).WithCallbackData(cancel.String()),
 		))
 
-		text := fmt.Sprintf("Delete group '%s' together with its %d member(s)? This cannot be undone.", group.Name, len(group.Members))
-		b.sendMessage(ctx, chatID, escapeMarkdownV2(text), original, keyboard)
+		b.sendMessage(ctx, chatID, md(lang, "force.confirm", group.Name, i18n.Plural(lang, "members", len(group.Members))), original, keyboard)
 
 		return nil
 	})
@@ -275,16 +276,18 @@ func (b *Bot) handleForceDelete(ctx context.Context, message t.Message, groupNam
 
 // handleForceDeleteCallback processes the Delete/Cancel buttons of a force-delete confirmation.
 func (b *Bot) handleForceDeleteCallback(ctx context.Context, query t.CallbackQuery, msg *t.Message, data callbackData) {
+	lang := langOf(&query.From)
+
 	if data.action == "dx" {
-		b.answerCallback(ctx, query.ID, "Cancelled.")
-		b.editMessage(ctx, msg, escapeMarkdownV2("Deletion cancelled."))
+		b.answerCallback(ctx, query.ID, tr(lang, "force.toast_cancel"))
+		b.editMessage(ctx, msg, md(lang, "force.cancelled"))
 
 		return
 	}
 
 	// Re-check: the button may be pressed long after the command was issued
 	if !b.isChatAdmin(ctx, msg.Chat.ID, query.From.ID) {
-		b.answerCallback(ctx, query.ID, "Only chat admins can do this.")
+		b.answerCallback(ctx, query.ID, tr(lang, "force.not_admin"))
 
 		return
 	}
@@ -293,24 +296,24 @@ func (b *Bot) handleForceDeleteCallback(ctx context.Context, query t.CallbackQue
 
 	switch {
 	case errors.Is(err, storage.ErrNotFound) || (err == nil && group.ChatID != msg.Chat.ID):
-		b.answerCallback(ctx, query.ID, "This group no longer exists.")
-		b.editMessage(ctx, msg, escapeMarkdownV2("This group no longer exists."))
+		b.answerCallback(ctx, query.ID, tr(lang, "cb.group_gone"))
+		b.editMessage(ctx, msg, md(lang, "cb.group_gone"))
 
 		return
 	case err != nil:
-		b.answerCallback(ctx, query.ID, "Something went wrong. Please try again.")
+		b.answerCallback(ctx, query.ID, tr(lang, "error.generic"))
 
 		return
 	}
 
 	if err := b.storage.DeleteGroup(ctx, group.ID); err != nil {
 		logError("bot: Failed to force-delete group", err, "group_id", group.ID)
-		b.answerCallback(ctx, query.ID, "Failed to delete group.")
+		b.answerCallback(ctx, query.ID, tr(lang, "force.failed"))
 
 		return
 	}
 
 	slog.Info("bot: Admin action", "action", "force-delete", "chat_id", msg.Chat.ID, "admin_id", query.From.ID, "group_id", group.ID, "member_count", len(group.Members))
-	b.answerCallback(ctx, query.ID, "Group deleted.")
-	b.editMessage(ctx, msg, escapeMarkdownV2(fmt.Sprintf("Group '%s' and its %d member(s) have been deleted.", group.Name, len(group.Members))))
+	b.answerCallback(ctx, query.ID, tr(lang, "force.toast_done"))
+	b.editMessage(ctx, msg, md(lang, "force.done", group.Name, i18n.Plural(lang, "members", len(group.Members))))
 }
